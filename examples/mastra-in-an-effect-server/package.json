@@ -1,0 +1,31 @@
+{
+  "name": "@guillem_puche/mastra-in-an-effect-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Effect owns the HTTP server; Mastra's routes, Better Auth and Scalar docs all mount onto it",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.116",
+    "@guillem_puche/mastra-effect": "link:../..",
+    "@mastra/auth-better-auth": "^1.1.5",
+    "@mastra/core": "1.68.0-alpha.10",
+    "@mastra/mcp": "^1.18.0",
+    "@mastra/server": "1.68.0-alpha.10",
+    "better-auth": "^1.7.4",
+    "effect": "4.0.0-rc.116"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "hono": "^4.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -1,9 +1,19 @@
 node_modules/
 dist/
-.direnv/
 *.tsbuildinfo
 .DS_Store
 coverage/
 *.log
 .env
 .env.*
+
+# direnv's materialised nix profile
+.direnv/
+
+# nix build output symlinks
+result
+result-*
+
+# vendored reference source is committed; its build output is not
+docs/repos/**/dist/
+docs/repos/**/node_modules/

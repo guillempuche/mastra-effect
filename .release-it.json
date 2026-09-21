@@ -1,0 +1,51 @@
+{
+  "$schema": "https://unpkg.com/release-it@20/schema/release-it.json",
+  "git": {
+    "commit": true,
+    "commitMessage": "cicd(release): v${version}",
+    "push": true,
+    "pushArgs": ["--follow-tags"],
+    "requireBranch": "main",
+    "requireCleanWorkingDir": true,
+    "requireCommits": true,
+    "requireUpstream": true,
+    "tag": true,
+    "tagAnnotation": "Release v${version}",
+    "tagName": "v${version}"
+  },
+  "github": {
+    "autoGenerate": false,
+    "draft": false,
+    "preRelease": false,
+    "release": true,
+    "releaseName": "v${version}",
+    "tokenRef": "GITHUB_TOKEN"
+  },
+  "npm": {
+    "publish": true
+  },
+  "hooks": {
+    "before:init": ["pnpm typecheck", "pnpm test", "pnpm build"],
+    "after:release": "echo '✅ Released ${name} v${version}'"
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "header": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n",
+      "infile": "CHANGELOG.md",
+      "ignoreRecommendedBump": true,
+      "preset": {
+        "name": "conventionalcommits",
+        "types": [
+          { "type": "feat", "section": "Features" },
+          { "type": "fix", "section": "Bug Fixes" },
+          { "type": "perf", "section": "Performance" },
+          { "type": "refactor", "section": "Refactoring" },
+          { "type": "docs", "section": "Documentation" },
+          { "type": "test", "section": "Tests" },
+          { "type": "cicd", "section": "CI/CD" },
+          { "type": "chore", "hidden": true }
+        ]
+      }
+    }
+  }
+}
