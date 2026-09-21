@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // docs/repos is a vendored git subtree of Effect's source. It carries its own
+  // .oxlintrc.json referencing a plugin this repo does not install, so linting
+  // must be pointed at our config explicitly (`oxlint -c .oxlintrc.json .`) —
+  // ignorePatterns alone does not stop oxlint discovering that nested config.
+  "ignorePatterns": ["dist/**", "node_modules/**", "**/node_modules/**", "docs/repos/**"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    // __refreshHeaders is Mastra's own key for smuggling Set-Cookie back through
+    // a handler's result. It is read, not chosen, so it cannot be renamed.
+    "eslint/no-underscore-dangle": ["error", { "allow": ["__refreshHeaders"] }]
+  },
+  "env": {
+    "es2024": true,
+    "node": true
+  }
+}

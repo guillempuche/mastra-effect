@@ -1,0 +1,155 @@
+name: CI
+
+# `pull_request`, never `pull_request_target`. A fork's PR must run with a
+# read-only token and no access to secrets; `pull_request_target` would run that
+# same untrusted code in the base repository's context, where a single edited
+# config file is enough to exfiltrate everything this repository can reach.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Read-only by default. Individual jobs escalate only if they must; nothing here
+# needs to write, so nothing here can.
+permissions:
+  contents: read
+
+# A second push to a PR makes the first run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The floor declared in engines. Testing above it only proves the ceiling.
+  NODE_VERSION: '22.13'
+
+jobs:
+  library:
+    name: Library
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # --frozen-lockfile turns an unreviewed lockfile edit into a failed build
+      # rather than a silent resolution change.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+      # Runs publint and are-the-types-wrong as part of the build, so a broken
+      # exports map or a type that does not resolve for a consumer fails here
+      # rather than after publishing.
+      - run: pnpm build
+
+  example:
+    name: Example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # The example links the library by path, so the library has to be built
+      # before the example can resolve its types.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Install and check the example
+        working-directory: examples/mastra-in-an-effect-server
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+
+  package:
+    name: Published artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # `files: ["dist"]` is what keeps the 53 MB vendored Effect subtree out of
+      # the tarball. That is one edit away from being wrong, and the failure is
+      # silent, so assert it rather than trust it.
+      - name: Assert the tarball holds only what it should
+        run: |
+          set -euo pipefail
+
+          # `npm pack --json` reports the file list and the unpacked size as
+          # structured data. Reading it beats parsing `tar -tv`, whose size column
+          # is field 3 on GNU tar and field 5 on BSD tar — a difference that
+          # silently yields an empty total rather than an error.
+          npm pack --dry-run --json > /tmp/pack.json
+
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+
+            const [pkg] = JSON.parse(readFileSync("/tmp/pack.json", "utf8"));
+            const files = pkg.files.map(f => f.path);
+            const fail = message => { console.log(`::error::${message}`); process.exit(1); };
+
+            // Every assertion below is about the file list, so all of them pass
+            // trivially on an empty one. Prove it is populated first, or the
+            // check reports success exactly when it did not run.
+            if (files.length < 5) fail(`tarball lists ${files.length} files, which cannot be right`);
+            console.log(files.join("\n"));
+
+            for (const forbidden of ["src/", "docs/", "examples/", ".github/"]) {
+              const leaked = files.filter(f => f.startsWith(forbidden));
+              if (leaked.length > 0) fail(`${forbidden} must never be published: ${leaked.join(", ")}`);
+            }
+
+            // A `files` edit that dropped dist would satisfy every check above.
+            if (!files.includes("dist/index.js")) fail("dist/index.js is missing from the tarball");
+
+            console.log(`unpacked bytes: ${pkg.unpackedSize}`);
+            if (!(pkg.unpackedSize > 0)) fail("could not measure the tarball");
+            if (pkg.unpackedSize > 1_000_000) fail("tarball grew past 1 MB — check what was added");
+          '
+
+  subtree:
+    name: Vendored Effect matches installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # docs/repos/effect is a second source of truth: the code compiles against
+      # the npm package while a reader consults the subtree. src/effect-api-gate.ts
+      # catches API drift but not version drift, and a dependency bot can move the
+      # npm side without touching the subtree, which no bot can update.
+      - name: Compare the subtree tag against the installed version
+        run: |
+          set -euo pipefail
+          vendored=$(node -p "require('./docs/repos/effect/packages/effect/package.json').version")
+          installed=$(node -p "require('effect/package.json').version")
+          echo "vendored:  $vendored"
+          echo "installed: $installed"
+          if [ "$vendored" != "$installed" ]; then
+            echo "::error::docs/repos/effect is at $vendored but effect resolves to $installed."
+            echo "Run: git subtree pull --prefix docs/repos/effect https://github.com/Effect-TS/effect.git effect@$installed --squash"
+            exit 1
+          fi

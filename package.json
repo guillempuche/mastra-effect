@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint .",
+    "lint": "oxlint -c .oxlintrc.json .",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },
@@ -41,18 +41,20 @@
     "effect": ">=4.0.0-rc.116 <5"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "^0.18.5",
     "@mastra/core": "1.68.0-alpha.10",
     "@mastra/mcp": "^1.18.0",
     "@mastra/server-adapters-test-suite": "0.1.0-alpha.0",
+    "@release-it/conventional-changelog": "^11.0.1",
     "@types/node": "^22.20.1",
     "effect": "4.0.0-rc.116",
     "oxlint": "^1.0.0",
+    "publint": "^0.3.24",
+    "release-it": "^20.2.1",
     "tsdown": "^0.23.0",
     "typescript": "^7.0.2",
     "vitest": "4.1.11",
-    "zod": "^4.6.4",
-    "release-it": "^20.2.1",
-    "@release-it/conventional-changelog": "^11.0.1"
+    "zod": "^4.6.4"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -73,5 +75,6 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "packageManager": "pnpm@11.1.1"
 }
