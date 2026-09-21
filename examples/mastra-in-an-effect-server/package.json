@@ -7,15 +7,27 @@
   "scripts": {
     "dev": "node --experimental-strip-types src/server.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:otel": "otel-tui",
+    "dev:traced": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --experimental-strip-types src/server.ts"
   },
   "dependencies": {
+    "@effect/opentelemetry": "4.0.0-rc.116",
     "@effect/platform-node": "4.0.0-rc.116",
     "@guillem_puche/mastra-effect": "link:../..",
     "@mastra/auth-better-auth": "^1.1.5",
     "@mastra/core": "1.68.0-alpha.10",
     "@mastra/mcp": "^1.18.0",
     "@mastra/server": "1.68.0-alpha.10",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.222.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
+    "@opentelemetry/sdk-metrics": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "better-auth": "^1.7.4",
     "effect": "4.0.0-rc.116"
   },

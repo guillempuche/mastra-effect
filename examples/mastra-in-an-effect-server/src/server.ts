@@ -7,6 +7,7 @@ import { HttpEffect, HttpServer, HttpServerResponse } from 'effect/unstable/http
 
 import { createAuth } from './auth';
 import { createMastra } from './mastra';
+import { recordRequests, telemetryLayer } from './observability';
 import { scalarPage } from './scalar';
 
 export interface BuildOptions {
@@ -30,6 +31,10 @@ export async function buildServer(options: BuildOptions = {}): Promise<EffectRou
   const mastra = createMastra(auth);
 
   const router = createRouter();
+
+  // Registered before anything else on purpose. Middleware that answers a request itself hides
+  // everything registered after it, and a refused request is the one most worth a record.
+  recordRequests(router);
 
   // The app's own Effect-native routes.
   await Effect.runPromise(router.add('GET', '/healthz', HttpServerResponse.text('ok')));
@@ -60,10 +65,18 @@ export async function buildServer(options: BuildOptions = {}): Promise<EffectRou
   return router;
 }
 
-/** Serves the assembled router on Node. */
+/**
+ * Serves the assembled router on Node.
+ *
+ * The telemetry layer is merged rather than only provided: a layer can pass a service down to what
+ * it builds, or hand it back to whoever builds on top, and those are different things that look
+ * identical to the compiler. Provided without merging, the process boots, reports that export is
+ * enabled, and sends none of its own lines.
+ */
 export const serve = (router: EffectRouter, port: number) =>
   HttpServer.serve()(router.asHttpEffect()).pipe(
     Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
+    Layer.merge(telemetryLayer({ serviceName: 'mastra-in-an-effect-server' })),
   );
 
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '')) {
