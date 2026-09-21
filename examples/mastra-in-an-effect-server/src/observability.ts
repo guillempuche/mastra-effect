@@ -41,10 +41,20 @@ const ID_SHAPES = [
  * hyphenated English name, and the route table is asserted against in the tests.
  */
 function looksLikeId(segment: string): boolean {
+  // `URL.pathname` keeps percent-encoding, so an address arriving as
+  // `person%40example.com` would sail past a check against the raw segment and be written
+  // into the record. Decode before testing; a malformed escape is left as-is.
+  let decoded = segment;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    // Not valid percent-encoding — judge the raw segment instead.
+  }
+
   // An address is personal data even when it appears as a route segment.
-  if (segment.includes('@')) return true;
-  if (ID_SHAPES.some(shape => shape.test(segment))) return true;
-  return segment.length >= 21 && /\d/.test(segment) && /[A-Za-z]/.test(segment);
+  if (decoded.includes('@')) return true;
+  if (ID_SHAPES.some(shape => shape.test(decoded))) return true;
+  return decoded.length >= 21 && /\d/.test(decoded) && /[A-Za-z]/.test(decoded);
 }
 
 /**
@@ -117,9 +127,16 @@ export function recordRequests(router: EffectRouter): void {
           // A poll that went fine says only that the poller is still polling; a failing one is the
           // moment it exists for, so it keeps its usual level.
           const quiet = QUIET_PATHS.has(pathPattern) && event === 'http.request';
-          if (quiet) return Effect.as(Effect.logDebug(event, record), response);
-          if (event === 'http.server_error') return Effect.as(Effect.logError(event, record), response);
-          return Effect.as(Effect.logInfo(event, record), response);
+          const write = quiet
+            ? Effect.logDebug(event)
+            : event === 'http.server_error'
+              ? Effect.logError(event)
+              : Effect.logInfo(event);
+
+          // Annotations, not extra log arguments. `@effect/opentelemetry`'s logger builds OTLP
+          // attributes from annotations and folds message arguments into the body, so passing the
+          // record as a second argument would bury every field in a string nothing can group by.
+          return Effect.as(Effect.annotateLogs(write, record), response);
         });
       }),
     ),

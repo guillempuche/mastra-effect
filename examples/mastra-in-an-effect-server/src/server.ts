@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { pathToFileURL } from 'node:url';
 
 import { MastraServer, createRouter, type EffectRouter } from '@guillem_puche/mastra-effect';
 import { NodeHttpServer } from '@effect/platform-node';
@@ -79,7 +80,9 @@ export const serve = (router: EffectRouter, port: number) =>
     Layer.merge(telemetryLayer({ serviceName: 'mastra-in-an-effect-server' })),
   );
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '')) {
+// Compare the whole resolved path, not the basename: `endsWith(basename)` also matches any other
+// entry point called server.ts, so importing this module would bind a port as a side effect.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT ?? 3000);
   const router = await buildServer({ baseURL: `http://localhost:${port}` });
   await Effect.runPromise(Layer.launch(serve(router, port)) as Effect.Effect<never, unknown, never>);

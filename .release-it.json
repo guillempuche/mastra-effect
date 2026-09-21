@@ -22,7 +22,8 @@
     "tokenRef": "GITHUB_TOKEN"
   },
   "npm": {
-    "publish": true
+    "//": "false on purpose. Publication belongs to .github/workflows/release.yml, which uses npm trusted publishing over OIDC and so produces a provenance attestation. A local `pnpm release` versions, writes the changelog and pushes the tag; the tag triggers the workflow. Setting this true would publish a second, unsigned copy from whatever credentials the laptop happens to hold, and race the workflow for the same version.",
+    "publish": false
   },
   "hooks": {
     "before:init": ["pnpm typecheck", "pnpm test", "pnpm build"],

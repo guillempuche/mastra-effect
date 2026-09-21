@@ -20,19 +20,26 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The floor declared in engines. Testing above it only proves the ceiling.
+  # Used by the jobs that do not need the matrix. 22.13 is the floor `engines` claims.
   NODE_VERSION: '22.13'
 
 jobs:
   library:
-    name: Library
+    name: Library (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.13 is the floor `engines` promises; 24 is what flake.nix actually provisions, so
+        # it is the version every contributor runs. Testing only one of them leaves the other
+        # to fail on somebody's machine instead of here.
+        node: ['22.13', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ matrix.node }}
           cache: pnpm
 
       # --frozen-lockfile turns an unreviewed lockfile edit into a failed build

@@ -51,6 +51,25 @@ describe('sanitizePath', () => {
       expect(sanitized).not.toContain('@');
     });
 
+    it('should collapse an email that arrives percent-encoded', async () => {
+      // GIVEN an address encoded as clients routinely encode `@` in a path segment
+      // WHEN sanitized
+      // THEN it should be collapsed just as the unencoded form is — `URL.pathname` preserves
+      // the encoding, so a check against the raw segment would let the address through
+      const sanitized = sanitizePath('/api/users/person%40example.com/threads');
+
+      expect(sanitized).toBe('/api/users/:id/threads');
+      expect(sanitized).not.toContain('example.com');
+    });
+
+    it('should leave a malformed escape alone rather than throwing', async () => {
+      // GIVEN a segment that is not valid percent-encoding
+      // WHEN sanitized
+      // THEN decoding should fail softly and the segment should survive, because a logging
+      // helper must never be the thing that breaks a request
+      expect(sanitizePath('/api/x/%ZZbad')).toBe('/api/x/%ZZbad');
+    });
+
     it('should collapse a long generated id that mixes digits and letters', async () => {
       // GIVEN a nanoid-shaped segment
       // WHEN sanitized

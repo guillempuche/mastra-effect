@@ -32,8 +32,7 @@
     "release:dry": "release-it --dry-run",
     "lint-secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "lint-deps": "syncpack lint",
-    "fix-deps": "syncpack fix",
-    "prepare": "lefthook install"
+    "fix-deps": "syncpack fix"
   },
   "license": "Apache-2.0",
   "dependencies": {
