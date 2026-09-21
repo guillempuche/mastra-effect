@@ -6,6 +6,16 @@ coverage/
 *.log
 .env
 .env.*
+# ...but the template is meant to be committed, and `.env.*` above would swallow it.
+!.env.example
+
+# SQLite, for when the example's in-memory Better Auth store is swapped for libsql.
+# The -wal and -shm companions appear under WAL mode and are just as unwanted.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # direnv's materialised nix profile
 .direnv/
