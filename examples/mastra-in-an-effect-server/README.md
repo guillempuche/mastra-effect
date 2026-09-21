@@ -36,6 +36,55 @@ verifying it. Both are covered in [`server.integration.test.ts`](src/server.inte
 which is the point of running Mastra; Effect's `McpServer.layerHttp` exposes the app's own domain
 and could mount alongside on another path.
 
+## Observability
+
+Follows the rules in batuda's `docs/observability.md`. **One wide record per unit of work**: a
+request closes with exactly one line carrying every fact about it, because a question can only be
+answered from facts that share a line.
+
+```
+event               http.request | http.server_error | http.not_found
+request.id          ties everything from one request together
+http.method
+http.path_pattern   the route, with ids collapsed — never the raw URL
+http.status
+http.duration_ms
+```
+
+A missing route is `http.not_found` rather than an error: recorded as a failure, every bot probing
+for `/robots.txt` buries the errors that matter. A successful `/healthz` drops to `debug`, since it
+says only that the poller is still polling — a failing one keeps its level.
+
+**Raw URLs never reach a record.** `sanitizePath` drops the query string whole rather than filtering
+it, because an allowlist of safe parameter names holds only until someone adds one nobody thought to
+name — and that one would be a magic-link or reset token. Path segments that are ids or email
+addresses collapse to `:id`. Tests cover each case, including one asserting that no literal segment
+of any real Mastra route is mistaken for an id, which would silently merge unrelated routes into one
+bucket.
+
+### Local
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` is the on/off switch — unset means no export at all, and the process
+still runs. Telemetry is not needed to serve a request, so a missing endpoint must not stop the
+server.
+
+```bash
+pnpm dev:otel      # terminal 1 — otel-tui, from the nix flake, listening on :4317 / :4318
+pnpm dev:traced    # terminal 2 — the server, exporting to it
+```
+
+### Cloud
+
+A pure environment change; no code moves.
+
+| Environment | `OTEL_EXPORTER_OTLP_ENDPOINT` | `OTEL_EXPORTER_OTLP_HEADERS` |
+|---|---|---|
+| Local (otel-tui) | `http://localhost:4318` | *(empty)* |
+| Honeycomb | `https://api.honeycomb.io` | `x-honeycomb-team=KEY` |
+| Grafana Cloud | `https://otlp-gateway-….grafana.net/otlp` | `Authorization=Basic …` |
+
+The endpoint is not a secret; the headers carry the vendor key and are.
+
 ## Two things worth copying
 
 `public: ['/api/openapi.json']` on the auth provider. Mastra serves its OpenAPI document as an
