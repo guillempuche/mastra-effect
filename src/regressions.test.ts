@@ -80,7 +80,6 @@ describe('body limit without a declared Content-Length', () => {
           controller.close();
         },
       }),
-      // @ts-expect-error duplex is required for a stream body but missing from the DOM lib types
       duplex: 'half',
     });
 
