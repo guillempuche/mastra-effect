@@ -1,0 +1,43 @@
+# Fast checks on commit, slow ones on push. A pre-commit hook that takes longer
+# than a thought gets bypassed with --no-verify, and a bypassed hook protects
+# nothing.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: lint
+      glob: '*.{ts,tsx,js,mjs,cjs}'
+      # -c is required: without it oxlint discovers the vendored subtree's own
+      # config under docs/repos and dies loading a plugin this repo lacks.
+      run: pnpm exec oxlint -c .oxlintrc.json {staged_files}
+      stage_fixed: true
+
+    - name: typecheck
+      glob: '*.ts'
+      # Whole-project rather than per-file: a change in one file breaks types in
+      # another, which is exactly the failure a staged-files check would miss.
+      run: pnpm typecheck
+
+    - name: dependency-versions
+      glob: '**/package.json'
+      run: pnpm lint-deps
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: secrets
+      # This repository is public and publishes to npm, so a leaked credential is
+      # leaked to everyone. GitHub's push protection catches known token formats
+      # server-side; this runs before the push leaves the machine and also covers
+      # patterns GitHub does not know about.
+      run: pnpm lint-secrets
+
+    - name: test
+      # The full conformance suite — slow enough to belong here rather than on
+      # every commit, and the thing most likely to catch a real regression.
+      run: pnpm test
+
+    - name: build
+      # Runs publint and are-the-types-wrong, so a broken exports map or a type
+      # that will not resolve for a consumer is caught before it is pushed.
+      run: pnpm build

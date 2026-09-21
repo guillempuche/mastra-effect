@@ -24,9 +24,10 @@ const signUp = async (email: string) => {
     body: JSON.stringify({ email, password: 'correct-horse-battery-staple', name: 'Test User' }),
   });
 
-  const setCookie = response.headers.get('set-cookie') ?? '';
-  const cookie = setCookie.split(';')[0] ?? '';
-  return { response, cookie, token: cookie.split('=')[1] ?? '' };
+  // `set-cookie` is `<name>=<value>; Path=/; HttpOnly; ...`. The leading pair is what a browser
+  // sends back as `cookie`; the value on its own is the token the bearer-header test presents.
+  const sessionCookie = (response.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+  return { response, cookie: sessionCookie, token: sessionCookie.split('=')[1] ?? '' };
 };
 
 beforeAll(async () => {

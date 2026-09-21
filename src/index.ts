@@ -311,6 +311,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
           }
         : { 'Content-Type': 'text/plain' };
 
+    // `sendResponse` casts rather than checks, so a route handler that returns a bare stream instead
+    // of the `{ fullStream }` shape still arrives here.
     const source = result instanceof ReadableStream ? result : result.fullStream;
     let reader: ReadableStreamDefaultReader | undefined;
 
@@ -400,54 +402,60 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
 
       case 'mcp-http': {
         const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
-        const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
-        const { req, res } = toReqRes(forwardRequest);
         const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-        // Deliberately not awaited: startHTTP resolves when the body finishes, while
-        // toFetchResponse resolves once headers are sent. Awaiting here would stall SSE.
-        void server
-          .startHTTP({
-            url: new URL(forwardRequest.url),
+        return this.bridgeMcpTransport(ctx, '[MCP HTTP] Error in background startHTTP', ({ url, req, res }) =>
+          server.startHTTP({
+            url,
             httpPath: `${resolvedPrefix}${httpPath}`,
             req,
             res,
             options: Object.keys(options).length > 0 ? options : undefined,
-          })
-          .catch((error: unknown) => {
-            this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP', {
-              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            });
-          });
-
-        return forwardResponse(await toFetchResponse(res));
+          }),
+        );
       }
 
       case 'mcp-sse': {
         const { server, ssePath, messagePath } = result as MCPSseTransportResult;
-        const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
-        const { req, res } = toReqRes(forwardRequest);
 
-        void server
-          .startSSE({
-            url: new URL(forwardRequest.url),
+        return this.bridgeMcpTransport(ctx, '[MCP SSE] Error in background startSSE', ({ url, req, res }) =>
+          server.startSSE({
+            url,
             ssePath: `${resolvedPrefix}${ssePath}`,
             messagePath: `${resolvedPrefix}${messagePath}`,
             req,
             res,
-          })
-          .catch((error: unknown) => {
-            this.mastra.getLogger()?.error('[MCP SSE] Error in background startSSE', {
-              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            });
-          });
-
-        return forwardResponse(await toFetchResponse(res));
+          }),
+        );
       }
 
       default:
         return new Response(null, { status: 500 });
     }
+  }
+
+  /**
+   * Runs an MCP transport against a replayable copy of the request and returns what it wrote to the
+   * Node response object.
+   *
+   * `start` is deliberately not awaited: it resolves when the body finishes, while `toFetchResponse`
+   * resolves once headers are sent. Awaiting here would stall SSE.
+   */
+  private async bridgeMcpTransport(
+    ctx: EffectRequestContext,
+    errorMessage: string,
+    start: (transport: ReturnType<typeof toReqRes> & { url: URL }) => Promise<unknown>,
+  ): Promise<Response> {
+    const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
+    const { req, res } = toReqRes(forwardRequest);
+
+    void start({ url: new URL(forwardRequest.url), req, res }).catch((error: unknown) => {
+      this.mastra.getLogger()?.error(errorMessage, {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+    });
+
+    return forwardResponse(await toFetchResponse(res));
   }
 
   /** Never rejects — the caller runs it through `Effect.promise`, whose error channel is `never`. */
@@ -490,21 +498,16 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       if (authError?.error) {
         return json({ error: authError.error }, authError.status, authError.headers);
       }
+
       const refreshHeaders = authError?.headers ?? {};
 
-      if (this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-          if (permissionError) {
-            return json(
-              { error: permissionError.error, message: permissionError.message },
-              permissionError.status,
-              refreshHeaders,
-            );
-          }
-        }
+      const permissionError = await this.resolvePermissionError(route, requestContext);
+      if (permissionError) {
+        return json(
+          { error: permissionError.error, message: permissionError.message },
+          permissionError.status,
+          refreshHeaders,
+        );
       }
 
       const params = await this.getParams(route, ctx);
@@ -567,6 +570,25 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       }
     }
     return json(errorResponse, 413);
+  }
+
+  /**
+   * Mastra's RBAC check, which only applies once an auth provider is configured.
+   *
+   * `hasPermission` lives in an enterprise-only module, so `loadHasPermission` can come back empty;
+   * the request then proceeds unchecked rather than being refused.
+   */
+  private async resolvePermissionError(
+    route: ServerRoute,
+    requestContext: RequestContext,
+  ): Promise<{ status: number; error: string; message: string } | null> {
+    if (!this.mastra.getStudio?.()?.auth && !this.mastra.getServer()?.auth) return null;
+
+    const hasPermission = await loadHasPermission();
+    if (!hasPermission) return null;
+
+    const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+    return this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
   }
 
   private async validateParams(
@@ -736,20 +758,9 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
           });
           if (authError?.error) return json({ error: authError.error }, authError.status, authError.headers);
 
-          if (this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                requestContext,
-              );
-              if (permissionError) {
-                return json({ error: permissionError.error, message: permissionError.message }, permissionError.status);
-              }
-            }
+          const permissionError = await this.resolvePermissionError(serverRoute, requestContext);
+          if (permissionError) {
+            return json({ error: permissionError.error, message: permissionError.message }, permissionError.status);
           }
         }
 
