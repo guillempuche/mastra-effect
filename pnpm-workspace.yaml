@@ -8,7 +8,12 @@
 #
 # If a future dependency genuinely needs to build, pnpm will say so: add that one
 # package here rather than reaching for dangerouslyAllowAllBuilds.
-allowBuilds: {}
+allowBuilds:
+  # lefthook ships a Go binary and its install script fetches/links the build for
+  # this platform, so it cannot work without one. Allowed deliberately, as a
+  # named exception — which is the whole point of an allowlist over a blanket
+  # permit. It is a devDependency and never reaches a consumer of this package.
+  lefthook: true
 
 # Refuse to resolve a version published less than a day ago. A compromised
 # release is typically caught and unpublished within hours, so the delay is the
