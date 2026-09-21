@@ -19,7 +19,9 @@ pre-commit:
       run: pnpm typecheck
 
     - name: dependency-versions
-      glob: '**/package.json'
+      # No glob. `**/package.json` silently skips a root-level package.json,
+      # since `**/` wants at least one directory — and a hook that quietly never
+      # runs is worse than one that is merely slow. syncpack takes 200ms.
       run: pnpm lint-deps
 
 pre-push:
