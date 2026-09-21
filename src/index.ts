@@ -1,5 +1,4 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
@@ -20,7 +19,31 @@ import { toFetchResponse, toReqRes } from 'fetch-to-node';
 
 export type EffectRouter = HttpRouter.HttpRouter;
 
+/**
+ * Everything the adapter threads through a single request.
+ *
+ * Bound to both `TRequest` and `TResponse`. Effect has no mutable response object, and the base
+ * class never reads the `TResponse` argument — it only uses `sendResponse`'s return value — so the
+ * slot carries the request-side data `sendResponse` needs, the same way `@mastra/elysia` carries its
+ * framework context there. Passing an explicit object (rather than stashing properties on the
+ * `Request`) keeps `getParams` and `sendResponse` honest when called outside `handleRoute`.
+ */
+export interface EffectRequestContext {
+  readonly request: Request;
+  readonly pathParams: Record<string, string>;
+  /** Parsed once per request so nothing downstream re-reads the body. */
+  readonly body: unknown;
+  readonly bodyParseError?: { message: string };
+}
+
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+
+/** Methods that may carry a request body, per Mastra's route table. */
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+/** Methods whose JSON body may carry a `requestContext` envelope. */
+const CONTEXT_BODY_METHODS = new Set(['POST', 'PUT', 'PATCH']);
+/** What `effect/unstable/http`'s `HttpRouter.add` accepts, besides the `*` wildcard. */
+const EFFECT_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'QUERY']);
 
 let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
@@ -38,7 +61,12 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const;
 
 function json(body: unknown, status = 200, headers?: Record<string, string>): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...headers } });
+  return new Response(JSON.stringify(body), { status: toHttpStatus(status), headers: { ...JSON_HEADERS, ...headers } });
+}
+
+/** `new Response` throws outside 200-599, and this runs on the last-resort error path. */
+function toHttpStatus(status: unknown): number {
+  return typeof status === 'number' && Number.isInteger(status) && status >= 200 && status <= 599 ? status : 500;
 }
 
 /**
@@ -48,9 +76,11 @@ function json(body: unknown, status = 200, headers?: Record<string, string>): Re
 function createSafeReadableStream(body: ReadableStream<Uint8Array> | null): ReadableStream<Uint8Array> | null {
   if (!body) return null;
 
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reader = body.getReader();
+      reader = body.getReader();
       try {
         for (;;) {
           const { done, value } = await reader.read();
@@ -60,9 +90,22 @@ function createSafeReadableStream(body: ReadableStream<Uint8Array> | null): Read
       } catch {
         // Preserve chunks already sent before the upstream stream errored.
       } finally {
-        controller.close();
-        reader.releaseLock();
+        // Throws if the consumer already cancelled this stream, which is not an error here.
+        try {
+          controller.close();
+        } catch {
+          // Already closed or errored.
+        }
+        try {
+          reader.releaseLock();
+        } catch {
+          // A read was still in flight; the cancel below owns the reader instead.
+        }
       }
+    },
+    // Without this the client disconnecting leaves the loop above draining the upstream forever.
+    cancel(reason) {
+      return reader?.cancel(reason);
     },
   });
 }
@@ -75,7 +118,9 @@ async function createForwardRequest(request: Request, parsedBody: unknown): Prom
   let body: string | ArrayBuffer | undefined;
 
   if (parsedBody !== undefined) {
-    body = typeof parsedBody === 'string' ? parsedBody : JSON.stringify(parsedBody);
+    // Always re-encode: a parsed scalar string must go back out as JSON (`"ping"`), not as raw
+    // bytes, or the receiving MCP server fails to parse what it is handed.
+    body = JSON.stringify(parsedBody);
     if (!headers.has('content-type')) headers.set('content-type', 'application/json');
   } else if (!request.bodyUsed) {
     const buffer = await request.clone().arrayBuffer();
@@ -104,10 +149,17 @@ function forwardResponse(source: Response): Response {
   });
 }
 
-function methodFor(route: ServerRoute): 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | '*' {
-  const method = route.method.toUpperCase();
-  if (method === 'ALL') return '*';
-  return method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
+/** Maps a Mastra route method onto what Effect's router accepts, rather than asserting it blindly. */
+function effectMethod(method: string, path: string): 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | '*' {
+  const upper = method.toUpperCase();
+  if (upper === 'ALL') return '*';
+  if (!EFFECT_METHODS.has(upper)) {
+    throw new Error(
+      `[@guillem_puche/mastra-effect] Unsupported HTTP method "${method}" for route ${path}. ` +
+        `effect/unstable/http accepts ${[...EFFECT_METHODS].join(', ')} or ALL.`,
+    );
+  }
+  return upper as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
 }
 
 /**
@@ -116,28 +168,33 @@ function methodFor(route: ServerRoute): 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELE
  * `TApp` is a live `HttpRouter` service instance rather than a Layer: Mastra's `registerRoutes()`
  * awaits ~400 sequential registrations against one fixed app, which the Layer-based
  * `HttpRouter.add` cannot express but the service's effectful `add` can.
- *
- * `TRequest` and `TResponse` are both the Web `Request`. Nothing mutates a response — the base class
- * never reads the `TResponse` argument, it only uses `sendResponse`'s return value — so the slot
- * carries request data that `sendResponse` needs (notably for MCP forwarding), exactly as
- * `@mastra/elysia` carries its framework context there.
  */
-export class MastraServer extends MastraServerBase<EffectRouter, Request, Request> {
-  /** Builds the per-request Mastra context. Effect has no `derive`, so routes call this directly. */
-  createContextMiddleware() {
-    return async (request: Request): Promise<RequestContext> => {
+export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestContext, EffectRequestContext> {
+  private contextMiddleware?: (request: Request, parsedBody?: unknown) => Promise<RequestContext>;
+
+  /**
+   * Builds the per-request Mastra context. Effect has no `derive`, so routes call this directly.
+   *
+   * `parsedBody` lets the request path reuse the body it already parsed; omitting it (as the
+   * multipart conformance suite does, fetching this middleware standalone) falls back to reading.
+   */
+  createContextMiddleware(): (request: Request, parsedBody?: unknown) => Promise<RequestContext> {
+    this.contextMiddleware ??= async (request: Request, parsedBody?: unknown): Promise<RequestContext> => {
       let bodyRequestContext: Record<string, any> | undefined;
       let paramsRequestContext: Record<string, any> | undefined;
 
       const method = request.method.toUpperCase();
-      if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
-        if (request.headers.get('content-type')?.includes('application/json')) {
+      if (CONTEXT_BODY_METHODS.has(method)) {
+        let body = parsedBody;
+        if (body === undefined && request.headers.get('content-type')?.includes('application/json')) {
           try {
-            const body = (await request.clone().json()) as { requestContext?: Record<string, any> };
-            if (body?.requestContext) bodyRequestContext = body.requestContext;
+            body = await request.clone().json();
           } catch {
             // Not valid JSON — the route's own body parsing reports this.
           }
+        }
+        if (body && typeof body === 'object' && 'requestContext' in body) {
+          bodyRequestContext = (body as { requestContext?: Record<string, any> }).requestContext;
         }
       }
 
@@ -163,47 +220,60 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
       });
       return requestContext;
     };
+
+    return this.contextMiddleware;
   }
 
-  async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
-    const url = new URL(request.url);
-    const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
-    const urlParams = ((request as any).__mastraPathParams ?? {}) as Record<string, string>;
+  async getParams(route: ServerRoute, ctx: EffectRequestContext): Promise<ParsedRequestParams> {
+    const url = new URL(ctx.request.url);
+    return {
+      urlParams: ctx.pathParams,
+      queryParams: normalizeQueryParams(Object.fromEntries(url.searchParams)),
+      body: ctx.body,
+      bodyParseError: ctx.bodyParseError,
+    };
+  }
 
-    let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+  /**
+   * Reads and parses the body exactly once.
+   *
+   * `oversize` rather than a body when the limit is blown: a chunked request declares no
+   * `Content-Length`, so measuring what actually arrived is the only way to enforce the cap.
+   */
+  private async readBody(
+    route: ServerRoute,
+    request: Request,
+    maxSize?: number,
+  ): Promise<{ body?: unknown; bodyParseError?: { message: string }; oversize?: true }> {
+    if (!BODY_METHODS.has(route.method.toUpperCase())) return {};
 
-    const method = route.method.toUpperCase();
-    if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
-      const contentType = request.headers.get('content-type') ?? '';
+    const contentType = request.headers.get('content-type') ?? '';
 
-      if (contentType.includes('multipart/form-data')) {
-        try {
-          body = await this.parseFormData(await request.clone().formData());
-        } catch (error) {
-          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-          });
-          if (error instanceof Error && error.message.toLowerCase().includes('size')) throw error;
-          bodyParseError = {
-            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
-          };
-        }
-      } else if (contentType.includes('application/json')) {
-        const text = await request.clone().text();
-        if (text.trim().length > 0) {
-          try {
-            body = JSON.parse(text);
-          } catch (error) {
-            bodyParseError = {
-              message: error instanceof Error ? error.message : 'Invalid JSON in request body',
-            };
-          }
-        }
+    if (contentType.includes('multipart/form-data')) {
+      try {
+        return { body: await this.parseFormData(await request.clone().formData()) };
+      } catch (error) {
+        this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+        });
+        if (error instanceof Error && error.message.toLowerCase().includes('size')) return { oversize: true };
+        return {
+          bodyParseError: { message: error instanceof Error ? error.message : 'Failed to parse multipart form data' },
+        };
       }
     }
 
-    return { urlParams, queryParams, body, bodyParseError };
+    if (!contentType.includes('application/json')) return {};
+
+    const text = await request.clone().text();
+    if (maxSize !== undefined && new TextEncoder().encode(text).byteLength > maxSize) return { oversize: true };
+    if (text.trim().length === 0) return {};
+
+    try {
+      return { body: JSON.parse(text) };
+    } catch (error) {
+      return { bodyParseError: { message: error instanceof Error ? error.message : 'Invalid JSON in request body' } };
+    }
   }
 
   /** Files arrive as Node Buffers; the conformance multipart suite asserts `Buffer.isBuffer`. */
@@ -223,7 +293,11 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
     return result;
   }
 
-  async stream(route: ServerRoute, _request: Request, result: { fullStream: ReadableStream }): Promise<Response> {
+  async stream(
+    route: ServerRoute,
+    _ctx: EffectRequestContext,
+    result: { fullStream: ReadableStream },
+  ): Promise<Response> {
     const streamFormat = route.streamFormat || 'stream';
     const encoder = new TextEncoder();
 
@@ -237,10 +311,12 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
           }
         : { 'Content-Type': 'text/plain' };
 
+    const source = result instanceof ReadableStream ? result : result.fullStream;
+    let reader: ReadableStreamDefaultReader | undefined;
+
     const stream = new ReadableStream<Uint8Array>({
       start: async controller => {
-        const source = result instanceof ReadableStream ? result : result.fullStream;
-        const reader = source.getReader();
+        reader = source.getReader();
 
         try {
           if (streamFormat === 'sse' && route.sseFlushOnConnect) {
@@ -279,17 +355,30 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          controller.error(error);
+          // Throws if the consumer already cancelled, which is not itself worth surfacing.
+          try {
+            controller.error(error);
+          } catch {
+            // Already closed or errored.
+          }
         } finally {
           await reader.cancel().catch(() => {});
         }
+      },
+      cancel(reason) {
+        return reader?.cancel(reason);
       },
     });
 
     return new Response(stream, { headers });
   }
 
-  async sendResponse(route: ServerRoute, request: Request, result: unknown, prefix?: string): Promise<Response> {
+  async sendResponse(
+    route: ServerRoute,
+    ctx: EffectRequestContext,
+    result: unknown,
+    prefix?: string,
+  ): Promise<Response> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
     // Transparent session refresh smuggles Set-Cookie back through the result object.
@@ -304,14 +393,14 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         return json(result ?? null, 200, refreshHeaders);
 
       case 'stream':
-        return this.stream(route, request, result as { fullStream: ReadableStream });
+        return this.stream(route, ctx, result as { fullStream: ReadableStream });
 
       case 'datastream-response':
         return forwardResponse(result as Response);
 
       case 'mcp-http': {
         const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
-        const forwardRequest = await createForwardRequest(request, (request as any).__mastraBody);
+        const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
         const { req, res } = toReqRes(forwardRequest);
         const options = { ...this.mcpOptions, ...routeMcpOptions };
 
@@ -336,7 +425,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
 
       case 'mcp-sse': {
         const { server, ssePath, messagePath } = result as MCPSseTransportResult;
-        const forwardRequest = await createForwardRequest(request, (request as any).__mastraBody);
+        const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
         const { req, res } = toReqRes(forwardRequest);
 
         void server
@@ -369,7 +458,23 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
     pathParams: Record<string, string>,
   ): Promise<Response> {
     try {
-      const requestContext = await this.createContextMiddleware()(request);
+      const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+
+      // Gate one, on headers alone, so an oversized body is rejected before it is read.
+      if (this.exceedsDeclaredLimit(route, request, maxSize)) return this.bodyLimitResponse(route);
+
+      const parsed = await this.readBody(route, request, maxSize);
+      // Gate two, on what actually arrived, for requests that declared no Content-Length.
+      if (parsed.oversize) return this.bodyLimitResponse(route);
+
+      const ctx: EffectRequestContext = {
+        request,
+        pathParams,
+        body: parsed.body,
+        bodyParseError: parsed.bodyParseError,
+      };
+
+      const requestContext = await this.createContextMiddleware()(request, parsed.body);
       const url = new URL(request.url);
 
       const authError = await this.checkRouteAuth(route, {
@@ -402,12 +507,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         }
       }
 
-      const overLimit = this.checkBodyLimit(route, request);
-      if (overLimit) return overLimit;
-
-      (request as any).__mastraPathParams = pathParams;
-      const params = await this.getParams(route, request);
-      (request as any).__mastraBody = params.body;
+      const params = await this.getParams(route, ctx);
 
       if (params.bodyParseError) {
         return json(
@@ -429,9 +529,6 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         return json({ error: fgaError.error, message: fgaError.message }, fgaError.status, refreshHeaders);
       }
 
-      const abortController = new AbortController();
-      request.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
-
       const result = await route.handler({
         ...params.urlParams,
         ...params.queryParams,
@@ -440,12 +537,12 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         mastra: this.mastra,
         registeredTools: this.tools ?? {},
         taskStore: this.taskStore,
-        abortSignal: request.signal ?? abortController.signal,
+        abortSignal: request.signal,
         routePrefix: prefix,
         request,
       });
 
-      const response = await this.sendResponse(route, request, result, prefix);
+      const response = await this.sendResponse(route, { ...ctx, body: params.body }, result, prefix);
       for (const [key, value] of Object.entries(refreshHeaders)) response.headers.set(key, value);
       return response;
     } catch (error) {
@@ -453,16 +550,13 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
     }
   }
 
-  private checkBodyLimit(route: ServerRoute, request: Request): Response | undefined {
-    const method = route.method.toUpperCase();
-    if (method !== 'POST' && method !== 'PUT' && method !== 'PATCH' && method !== 'DELETE') return undefined;
-
-    const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
-    if (maxSize === undefined) return undefined;
-
+  private exceedsDeclaredLimit(route: ServerRoute, request: Request, maxSize?: number): boolean {
+    if (maxSize === undefined || !BODY_METHODS.has(route.method.toUpperCase())) return false;
     const contentLength = request.headers.get('content-length');
-    if (contentLength === null || Number.parseInt(contentLength, 10) <= maxSize) return undefined;
+    return contentLength !== null && Number.parseInt(contentLength, 10) > maxSize;
+  }
 
+  private bodyLimitResponse(route: ServerRoute): Response {
     let errorResponse: unknown = { error: 'Request body too large' };
     // A route-level cap is the route's own policy; only the global limit runs the global onError.
     if (route.maxBodySize === undefined && this.bodyLimitOptions) {
@@ -480,11 +574,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
     params: ParsedRequestParams,
     refreshHeaders: Record<string, string>,
   ): Promise<{ ok: true } | { response: Response }> {
-    const steps: Array<{
-      context: 'query' | 'body' | 'path';
-      run: () => Promise<void>;
-      fallback: string;
-    }> = [
+    const steps: Array<{ context: 'query' | 'body' | 'path'; run: () => Promise<void>; fallback: string }> = [
       {
         context: 'query',
         fallback: 'Invalid query parameters',
@@ -550,8 +640,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
     const customResponse = getCustomHTTPExceptionResponse(error);
     if (customResponse) return customResponse;
 
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return json({ error: message }, typeof status === 'number' ? status : 500);
+    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, toHttpStatus(status));
   }
 
   async registerRoute(
@@ -571,15 +660,13 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         // defect, not a recoverable route error, and `never` is what makes `add` runnable below.
         Effect.flatMap(Effect.orDie(HttpServerRequest.toWeb(serverRequest)), webRequest =>
           Effect.map(
-            Effect.promise(() =>
-              this.handleRoute(route, prefix, webRequest, pathParams as Record<string, string>),
-            ),
+            Effect.promise(() => this.handleRoute(route, prefix, webRequest, pathParams as Record<string, string>)),
             HttpServerResponse.fromWeb,
           ),
         ),
       );
 
-    await Effect.runPromise(app.add(methodFor(route), fullPath as `/${string}`, handler));
+    await Effect.runPromise(app.add(effectMethod(route.method, route.path), fullPath as `/${string}`, handler));
   }
 
   async registerCustomApiRoutes(): Promise<void> {
@@ -593,7 +680,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
         );
 
       await Effect.runPromise(
-        this.app.add(route.method.toUpperCase() === 'ALL' ? '*' : (route.method.toUpperCase() as 'GET'), route.path as `/${string}`, handler),
+        this.app.add(effectMethod(route.method, route.path), route.path as `/${string}`, handler),
       );
     }
   }
@@ -603,7 +690,20 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
       const url = new URL(request.url);
       const path = url.pathname;
       const method = request.method;
-      const requestContext = await this.createContextMiddleware()(request);
+
+      let body: unknown;
+      if (method !== 'GET' && method !== 'HEAD') {
+        const text = await request.clone().text();
+        if (text.trim().length > 0) {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            body = text;
+          }
+        }
+      }
+
+      const requestContext = await this.createContextMiddleware()(request, body);
 
       const matchedRoute = findMatchingCustomRoute(
         path,
@@ -647,10 +747,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
                 requestContext,
               );
               if (permissionError) {
-                return json(
-                  { error: permissionError.error, message: permissionError.message },
-                  permissionError.status,
-                );
+                return json({ error: permissionError.error, message: permissionError.message }, permissionError.status);
               }
             }
           }
@@ -667,18 +764,6 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
       request.headers.forEach((value, key) => {
         headers[key] = value;
       });
-
-      let body: unknown;
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        const text = await request.clone().text();
-        if (text.trim().length > 0) {
-          try {
-            body = JSON.parse(text);
-          } catch {
-            body = text;
-          }
-        }
-      }
 
       // Not a fetch handler despite the shape: it takes loose primitives and builds the Request
       // itself. `null` means no custom route matched.
@@ -706,7 +791,9 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
   registerHttpLoggingMiddleware(): void {
     if (!this.httpLoggingConfig?.enabled) return;
 
-    void Effect.runPromise(
+    // runSync, not runPromise: the base calls this synchronously inside init() and immediately
+    // registers routes, so a floating promise would race registration and hide rejections.
+    Effect.runSync(
       this.app.addGlobalMiddleware(httpEffect =>
         Effect.flatMap(HttpServerRequest.HttpServerRequest, serverRequest => {
           // `url` may be origin-relative, so give URL a base purely to parse it.
@@ -729,9 +816,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, Request, Reques
             }
 
             if (this.httpLoggingConfig?.includeHeaders) {
-              const redact = this.httpLoggingConfig.redactHeaders ?? [];
               const headers: Record<string, unknown> = { ...serverRequest.headers };
-              for (const header of redact) {
+              for (const header of this.httpLoggingConfig.redactHeaders ?? []) {
                 if (headers[header.toLowerCase()] !== undefined) headers[header.toLowerCase()] = '[REDACTED]';
               }
               logData.headers = headers;
@@ -765,19 +851,19 @@ export const createRouter = (config?: Partial<FindMyWay.RouterConfig>): EffectRo
 export const toWebHandler = (router: EffectRouter) =>
   HttpRouter.toWebHandler(Layer.succeed(HttpRouter.HttpRouter)(router));
 
-export interface CreateMastraServerOptions {
-  mastra: Mastra;
-  tools?: ToolsInput;
-  prefix?: string;
-  [key: string]: unknown;
-}
+type MastraServerOptions = ConstructorParameters<typeof MastraServer>[0];
+
+/** Everything `MastraServer` takes except the router, which `createMastraServer` builds for you. */
+export type CreateMastraServerOptions = Omit<MastraServerOptions, 'app'>;
 
 /** Convenience wrapper: build a router, register every Mastra route onto it, return both. */
 export async function createMastraServer(
   options: CreateMastraServerOptions,
 ): Promise<{ router: EffectRouter; adapter: MastraServer }> {
   const router = createRouter();
-  const adapter = new MastraServer({ app: router, ...options } as ConstructorParameters<typeof MastraServer>[0]);
+  const adapter = new MastraServer({ ...options, app: router });
   await adapter.init();
   return { router, adapter };
 }
+
+export type { ToolsInput };
