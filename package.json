@@ -1,0 +1,70 @@
+{
+  "name": "@guillem_puche/mastra-effect",
+  "version": "0.0.0",
+  "description": "Mastra server adapter for the Effect v4 HTTP layer",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "build:watch": "pnpm build --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint ."
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@mastra/server": "^1.67.0",
+    "fetch-to-node": "^2.1.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.64.0-0 <2.0.0-0",
+    "effect": ">=4.0.0-rc.116 <5"
+  },
+  "devDependencies": {
+    "@mastra/core": "^1.67.0",
+    "@mastra/mcp": "^1.18.0",
+    "@mastra/server-adapters-test-suite": "0.1.0-alpha.0",
+    "@types/node": "^22.20.1",
+    "effect": "4.0.0-rc.116",
+    "oxlint": "^1.0.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11",
+    "zod": "^4.6.4"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "keywords": [
+    "mastra",
+    "effect",
+    "effect-ts",
+    "server-adapter",
+    "http"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guillempuche/mastra-effect-adapter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guillempuche/mastra-effect-adapter/issues"
+  }
+}
