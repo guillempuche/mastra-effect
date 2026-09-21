@@ -1,0 +1,21 @@
+# pnpm 11 reads its settings from here, not from .npmrc — only auth and registry
+# settings still come from .npmrc.
+
+# Deny every dependency lifecycle script. An install-time script is the primary
+# malware vector in a compromised release, and auditing this tree found that
+# nothing in it declares install, preinstall or postinstall at all — so the
+# allowlist is empty by evidence rather than by optimism.
+#
+# If a future dependency genuinely needs to build, pnpm will say so: add that one
+# package here rather than reaching for dangerouslyAllowAllBuilds.
+allowBuilds: {}
+
+# Refuse to resolve a version published less than a day ago. A compromised
+# release is typically caught and unpublished within hours, so the delay is the
+# window that catches it.
+#
+# The cost is real here: this repo tracks `rc` and `alpha` dist-tags, so the very
+# newest upstream build is briefly unavailable. That is the intended trade.
+# Renovate is configured with a longer window still, so it never opens a PR for a
+# version pnpm would then refuse to install.
+minimumReleaseAge: 1440

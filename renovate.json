@@ -1,0 +1,61 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":dependencyDashboard"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 3,
+
+  "//minimumReleaseAge": "Longer than pnpm's own 24h floor, so Renovate never opens a PR for a version pnpm would then refuse to resolve. It is also the window in which a compromised release is usually caught.",
+  "minimumReleaseAge": "3 days",
+
+  "//ignoreUnstable": "This package tracks prerelease lines on purpose — effect on `rc`, Mastra on `alpha`. Renovate ignores unstable versions by default, which here would mean doing nothing at all.",
+  "ignoreUnstable": false,
+
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on the first day of the month"]
+  },
+
+  "packageRules": [
+    {
+      "//": "Peer ranges are a compatibility contract with consumers, not a version this repo runs. Widening one is a release decision and narrowing one breaks everybody already installed, so no bot touches them.",
+      "matchDepTypes": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "//": "@mastra/core and @mastra/server must move together — a single bump leaves a tree where the conformance suite fails for reasons that look nothing like the cause. The test suite is versioned alongside them, so it joins the same PR.",
+      "matchPackageNames": [
+        "@mastra/core",
+        "@mastra/server",
+        "@mastra/mcp",
+        "@mastra/server-adapters-test-suite"
+      ],
+      "groupName": "mastra",
+      "followTag": "alpha",
+      "rangeStrategy": "pin"
+    },
+    {
+      "//": "Effect and its companion packages are released together on the rc line and must stay on the same version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs a `git subtree pull` that no bot can do, which CI asserts.",
+      "matchPackageNames": ["effect", "@effect/**"],
+      "groupName": "effect",
+      "followTag": "rc",
+      "rangeStrategy": "pin"
+    },
+    {
+      "//": "A dependency range this repo publishes. Raising the floor forces an upgrade on every consumer, so it is only right when the code starts using a newer API — a human call.",
+      "matchDepTypes": ["dependencies"],
+      "rangeStrategy": "widen"
+    },
+    {
+      "//": "Tooling is low-risk and noisy; batch it.",
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["!effect", "!@effect/**", "!@mastra/**"],
+      "groupName": "dev tooling"
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "//": "A published fix for a real vulnerability outranks the quiet period.",
+    "minimumReleaseAge": null,
+    "schedule": ["at any time"]
+  }
+}

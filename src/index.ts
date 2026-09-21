@@ -754,7 +754,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         }
 
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
-          ...(matchedRoute?.params ?? {}),
+          ...matchedRoute?.params,
           ...Object.fromEntries(url.searchParams),
         });
         if (fgaError) return json({ error: fgaError.error, message: fgaError.message }, fgaError.status);
