@@ -1,6 +1,12 @@
 # pnpm 11 reads its settings from here, not from .npmrc — only auth and registry
 # settings still come from .npmrc.
 
+# The example is a real member of this workspace. Left out, `pnpm install` inside its directory
+# resolves to the root workspace, reports "Already up to date" and installs nothing — so its
+# dependencies are simply absent and every import fails to resolve.
+packages:
+  - examples/*
+
 # Deny every dependency lifecycle script. An install-time script is the primary
 # malware vector in a compromised release, and auditing this tree found that
 # nothing in it declares install, preinstall or postinstall at all — so the

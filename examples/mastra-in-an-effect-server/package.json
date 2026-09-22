@@ -9,12 +9,14 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev:otel": "otel-tui",
-    "dev:traced": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --experimental-strip-types src/server.ts"
+    "dev:traced": "OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 node --experimental-strip-types src/server.ts",
+    "pretest": "pnpm --filter @guillem_puche/mastra-effect build",
+    "pretypecheck": "pnpm --filter @guillem_puche/mastra-effect build"
   },
   "dependencies": {
     "@effect/opentelemetry": "4.0.0-rc.116",
     "@effect/platform-node": "4.0.0-rc.116",
-    "@guillem_puche/mastra-effect": "link:../..",
+    "@guillem_puche/mastra-effect": "workspace:*",
     "@mastra/auth-better-auth": "^1.1.5",
     "@mastra/core": "1.68.0-alpha.10",
     "@mastra/mcp": "^1.18.0",

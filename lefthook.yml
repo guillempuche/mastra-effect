@@ -35,9 +35,10 @@ pre-push:
       run: pnpm lint-secrets
 
     - name: test
-      # The full conformance suite — slow enough to belong here rather than on
-      # every commit, and the thing most likely to catch a real regression.
-      run: pnpm test
+      # Both packages. --include-workspace-root is required: pnpm excludes the root project
+      # from -r by default, so `pnpm -r test` alone would run the example's 30 tests and
+      # silently skip the library's 2647 — the opposite of what this hook is for.
+      run: pnpm -r --include-workspace-root test
 
     - name: build
       # Runs publint and are-the-types-wrong, so a broken exports map or a type
