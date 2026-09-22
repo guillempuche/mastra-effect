@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    name: 'mastra-effect-adapter',
+    name: 'mastra-effect',
     isolate: false,
     environment: 'node',
     include: ['src/**/*.test.ts'],
