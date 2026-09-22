@@ -74,7 +74,14 @@
     "effect",
     "effect-ts",
     "server-adapter",
-    "http"
+    "http-server",
+    "mcp",
+    "ai-agents",
+    "agents",
+    "workflows",
+    "typescript",
+    "llm",
+    "adapter"
   ],
   "repository": {
     "type": "git",
