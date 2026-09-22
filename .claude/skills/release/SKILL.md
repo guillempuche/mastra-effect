@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut and publish a release of @guillem_puche/mastra-effect to npm. Use when asked to release, publish, cut a version, ship to npm, or bump the version. Covers the pre-release checks that matter for this package — the Mastra alpha pin, the Effect peer range, and what actually lands in the tarball.
+description: Cut and publish a release of @guillem_puche/mastra-effect to npm. Use when asked to release, publish, cut a version, ship to npm, or bump the version. Covers the pre-release checks that matter for this package — the pinned Mastra override, the Effect peer range, and what actually lands in the tarball.
 ---
 
 # Releasing this package
@@ -17,15 +17,16 @@ pnpm release       # requires a clean tree on main, with an upstream
 
 ## Decide these before bumping
 
-**1. Does the `@mastra/core` / `@mastra/server` pin need to move?**
+**1. Can the Mastra test override be dropped yet?**
 
-`devDependencies` pin both to an exact alpha because the published conformance suite requires
-`>=1.68.0-alpha` despite advertising `>=1.64.0-0`. Check whether a newer alpha exists and whether
-the suite still passes on it. **Bump them as a pair, never one alone.**
+Every manifest declares `@mastra/*` at `^1.68.0`. Tests run against `1.68.0-alpha.10`, pinned by
+`overrides` in `pnpm-workspace.yaml`, because the pinned conformance suite fails on stable's
+`POST /auth/logout` — a route the suite forgot to exclude, not an adapter fault. Check whether a
+newer suite release covers the stable line; if it does, delete the override and re-run the suite.
 
-`dependencies` carries a *range* (`^1.68.0-alpha.10`), not the exact pin. Keep it that way — an
-exact pin in a published package forces that version on every consumer and collides with their own
-`@mastra/server`.
+Never replace the declared range with a prerelease floor such as `^1.68.0-alpha.10`. A consumer
+running `minimumReleaseAge` then has the fresh stable gated out while the older alpha still
+satisfies the range, so pnpm resolves the prerelease silently.
 
 **2. Has the Effect line moved?**
 

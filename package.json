@@ -37,16 +37,17 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/server": "^1.68.0-alpha.10",
+    "@mastra/server": "^1.68.0",
     "fetch-to-node": "^2.1.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.64.0-0 <2.0.0-0",
-    "effect": ">=4.0.0-rc.116 <5"
+    "effect": ">=4.0.0-rc.116 <5",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "^0.18.5",
-    "@mastra/core": "1.68.0-alpha.10",
+    "@mastra/core": "^1.68.0",
     "@mastra/mcp": "^1.18.0",
     "@mastra/server-adapters-test-suite": "0.1.0-alpha.0",
     "@release-it/conventional-changelog": "^12.0.2",
@@ -85,5 +86,5 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@11.1.1"
+  "packageManager": "pnpm@12.3.4"
 }
