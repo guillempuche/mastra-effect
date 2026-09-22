@@ -1,0 +1,20 @@
+@guillem_puche/mastra-effect
+Copyright 2026 Guillem Puche
+
+This product includes software developed as part of the Mastra project
+(https://github.com/mastra-ai/mastra), Copyright Mastra AI, Inc., licensed
+under the Apache License, Version 2.0.
+
+Portions of src/index.ts are derived from the in-tree Mastra server adapters,
+principally @mastra/elysia (server-adapters/elysia). The behaviour carried over
+includes the stream framing for both SSE and record-separated formats, the
+error-swallowing forwarding stream, the stripping of Transfer-Encoding from a
+forwarded response, the structure of the responseType dispatch, and the decision
+not to await the MCP transport start call. Those portions remain under the
+Apache License, Version 2.0.
+
+This package depends on Effect (https://github.com/Effect-TS/effect), which is
+licensed under the MIT License and is a peer dependency rather than redistributed
+here. A copy of Effect's source is vendored under docs/repos/effect as a git
+subtree for reference only; it is excluded from the published package and remains
+under its own license.

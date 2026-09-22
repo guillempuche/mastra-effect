@@ -148,6 +148,13 @@ jobs:
             // A `files` edit that dropped dist would satisfy every check above.
             if (!files.includes("dist/index.js")) fail("dist/index.js is missing from the tarball");
 
+            // Apache-2.0 section 4(d) requires the NOTICE to travel with the distribution, and
+            // npm ships LICENSE on its own but not NOTICE — so NOTICE is only present while it
+            // stays listed in `files`, which is exactly the kind of thing that gets edited away.
+            for (const required of ["LICENSE", "NOTICE"]) {
+              if (!files.includes(required)) fail(`${required} is missing from the tarball`);
+            }
+
             console.log(`unpacked bytes: ${pkg.unpackedSize}`);
             if (!(pkg.unpackedSize > 0)) fail("could not measure the tarball");
             if (pkg.unpackedSize > 1_000_000) fail("tarball grew past 1 MB — check what was added");
