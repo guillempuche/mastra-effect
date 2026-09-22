@@ -1,16 +1,121 @@
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.3.4
+        version: 12.3.4
+
+packages:
+
+  '@pnpm/exe.darwin-arm64@12.3.4':
+    resolution: {integrity: sha512-PAyUol8T1+/+ViOiXAt51ECA+QnfXCqz6foL4bW+LsoX0NcVd5XVEM2mRQu+LV4oc7uRz9zf9U0P+XFfuQeDAw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@pnpm/exe.darwin-x64@12.3.4':
+    resolution: {integrity: sha512-fxP9JCk0Cdye+ePuj+GJJLMUMTqHGWRdb1dtv4How876uQ2ehxvenpgiYAir/ceO9PsYUZkFTtyZdx+rRu5QOA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@pnpm/exe.linux-arm64-musl@12.3.4':
+    resolution: {integrity: sha512-FBOt0/7ye6O6q4AllVV5QMviB6qE6fqkeczV/+MDWQsmo+QJrlfsh6X7CpH/tClVpBZEyIbjpUoT8bNhCYBxEg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/exe.linux-arm64@12.3.4':
+    resolution: {integrity: sha512-t71AVA7LRqiKTyZ5xMYaZc2n5DfdpMbfokZuiIOXHBOM03ECnF0t4iYwaBDqJgVjlKYUOwaF/bRQajGNA4cJ4w==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.linux-x64-musl@12.3.4':
+    resolution: {integrity: sha512-RPmk7Jb/aYaFvL2iyDN/AtMY+hUEsue732WmXpcuQ9tBpMnGyA5py7Z3+e+qmQaJ0zY/4ni9jJiyPBQHujmv6w==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/exe.linux-x64@12.3.4':
+    resolution: {integrity: sha512-2ZqOlSPkfwX1h5cR+FPiWf8+F+2hZT/3TvhUK5sigHqwaQCIiq8R7CGxhndKs63JtcLi2a1Qpo+wX/EoyfjyJQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.win32-arm64@12.3.4':
+    resolution: {integrity: sha512-ANyrHqyqco6SXBysUTRF74itDyyraea7IbFsKFdNXTjcFnfycTDx37EwuhdpPYFNSIh2JhUG4fByclsRfiHX7w==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@pnpm/exe.win32-x64@12.3.4':
+    resolution: {integrity: sha512-WH/KqBPY/hq2Tb7SgQltEZytimcjgKRaCRL/aM9CI0c67iKc5TVmHUhIiL3Ux9FB4bWn36i6XewUcScQI+zG8w==}
+    cpu: [x64]
+    os: [win32]
+
+  pnpm@12.3.4:
+    resolution: {integrity: sha512-lhqkH7B32joEpEHZ+OFevAyW2o73ELLrZ7+e58sGEOq9SPH9hfUc/+c4RnhfoPh8VqOocqHYk/hEZ0G1zORUVw==}
+    engines: {node: '>=18.*'}
+    hasBin: true
+
+snapshots:
+
+  '@pnpm/exe.darwin-arm64@12.3.4':
+    optional: true
+
+  '@pnpm/exe.darwin-x64@12.3.4':
+    optional: true
+
+  '@pnpm/exe.linux-arm64-musl@12.3.4':
+    optional: true
+
+  '@pnpm/exe.linux-arm64@12.3.4':
+    optional: true
+
+  '@pnpm/exe.linux-x64-musl@12.3.4':
+    optional: true
+
+  '@pnpm/exe.linux-x64@12.3.4':
+    optional: true
+
+  '@pnpm/exe.win32-arm64@12.3.4':
+    optional: true
+
+  '@pnpm/exe.win32-x64@12.3.4':
+    optional: true
+
+  pnpm@12.3.4:
+    optionalDependencies:
+      '@pnpm/exe.darwin-arm64': 12.3.4
+      '@pnpm/exe.darwin-x64': 12.3.4
+      '@pnpm/exe.linux-arm64': 12.3.4
+      '@pnpm/exe.linux-arm64-musl': 12.3.4
+      '@pnpm/exe.linux-x64': 12.3.4
+      '@pnpm/exe.linux-x64-musl': 12.3.4
+      '@pnpm/exe.win32-arm64': 12.3.4
+      '@pnpm/exe.win32-x64': 12.3.4
+
+---
 lockfileVersion: '9.0'
 
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@mastra/server': 1.68.0-alpha.10
+  '@mastra/core': 1.68.0-alpha.10
+
 importers:
 
   .:
     dependencies:
       '@mastra/server':
-        specifier: ^1.68.0-alpha.10
-        version: 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+        specifier: 1.68.0-alpha.10
+        version: 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       fetch-to-node:
         specifier: ^2.1.0
         version: 2.1.0
@@ -20,16 +125,16 @@ importers:
         version: 0.18.5
       '@mastra/core':
         specifier: 1.68.0-alpha.10
-        version: 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+        version: 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       '@mastra/mcp':
         specifier: ^1.18.0
-        version: 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5)
+        version: 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5)
       '@mastra/server-adapters-test-suite':
         specifier: 0.1.0-alpha.0
-        version: 0.1.0-alpha.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5))(@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5))(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0)))(zod@4.6.5)
+        version: 0.1.0-alpha.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5))(@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5))(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0)))(zod@4.6.5)
       '@release-it/conventional-changelog':
         specifier: ^12.0.2
-        version: 12.0.2(conventional-commits-filter@6.0.1)(conventional-commits-parser@7.1.2)(release-it@21.1.0(@types/node@22.20.4))
+        version: 12.0.2(conventional-commits-filter@6.0.1)(conventional-commits-parser@7.1.2)(release-it@21.1.0(@types/node@22.20.4)(supports-color@10.2.2))
       '@secretlint/secretlint-rule-preset-recommend':
         specifier: ^13.0.5
         version: 13.0.5
@@ -50,10 +155,10 @@ importers:
         version: 0.3.24
       release-it:
         specifier: ^21.1.0
-        version: 21.1.0(@types/node@22.20.4)
+        version: 21.1.0(@types/node@22.20.4)(supports-color@10.2.2)
       secretlint:
         specifier: ^13.0.5
-        version: 13.0.5
+        version: 13.0.5(supports-color@10.2.2)
       syncpack:
         specifier: ^14.3.1
         version: 14.3.1
@@ -89,13 +194,13 @@ importers:
         version: 1.1.5(@opentelemetry/api@1.9.1)(hono@4.13.8)(kysely@0.29.6)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0)))
       '@mastra/core':
         specifier: 1.68.0-alpha.10
-        version: 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+        version: 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       '@mastra/mcp':
         specifier: ^1.18.0
-        version: 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5)
+        version: 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5)
       '@mastra/server':
         specifier: 1.68.0-alpha.10
-        version: 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+        version: 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
@@ -605,7 +710,7 @@ packages:
     resolution: {integrity: sha512-t9oO9N4YKgdW04h9dQ0M0WysE2INxRGEn8zkqcIrHkVg6kLSpu4pFMoI37v09cXrgzjcAI7uWRFAgBgRz2Kxwg==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@mastra/core': '>=1.64.0-0 <2.0.0-0'
+      '@mastra/core': 1.68.0-alpha.10
 
   '@mastra/schema-compat@1.3.11-alpha.1':
     resolution: {integrity: sha512-46umF+HPj7T3JEMcxF1C/Y6+Ux9fvKRAcw0RQ6Mz30GH3EWxNCLBF83ekpb2ZDiQChszHDsUIAqIMXYIECo+PQ==}
@@ -617,9 +722,9 @@ packages:
     resolution: {integrity: sha512-8V9MWerHruc4gJ6Sm7UFU/3onfv4Xaz91hLNTZnhX+0FokTkY0k9OmClZKy4Ytg0tishpzHcl/NHmA3UMQQDRA==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@mastra/core': '>=1.64.0-0 <2.0.0-0'
+      '@mastra/core': 1.68.0-alpha.10
       '@mastra/mcp': '>=1.18.0-0 <2.0.0-0'
-      '@mastra/server': '>=1.64.0-0 <2.0.0-0'
+      '@mastra/server': 1.68.0-alpha.10
       vitest: '>=4.0.0 <5.0.0'
       zod: ^3.25.0 || ^4.0.0
 
@@ -627,7 +732,7 @@ packages:
     resolution: {integrity: sha512-r68OoCsjMr3Mv7Iu3G14vjyj7PgRJSZbz1nXMjy6Z8VL9yrF+SjBNhb1F/gQIg5gEPz/CE3J2rgqerh4s8jDUg==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
-      '@mastra/core': '>=1.50.0-0 <2.0.0-0'
+      '@mastra/core': 1.68.0-alpha.10
       zod: ^3.25.0 || ^4.0.0
 
   '@modelcontextprotocol/client@2.0.0':
@@ -3662,18 +3767,18 @@ packages:
 
 snapshots:
 
-  '@a2a-js/sdk@0.3.14(express@5.2.1)':
+  '@a2a-js/sdk@0.3.14(express@5.2.1(supports-color@10.2.2))':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
-      express: 5.2.1
+      express: 5.2.1(supports-color@10.2.2)
 
-  '@a2a-js/sdk@1.0.1(express@5.2.1)':
+  '@a2a-js/sdk@1.0.1(express@5.2.1(supports-color@10.2.2))':
     dependencies:
       jose: 6.2.12
       uuid: 11.1.1
     optionalDependencies:
-      express: 5.2.1
+      express: 5.2.1(supports-color@10.2.2)
 
   '@ai-sdk/provider-utils@4.0.40(zod@4.6.5)':
     dependencies:
@@ -4070,10 +4175,10 @@ snapshots:
       - vitest
       - vue
 
-  '@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)':
+  '@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)':
     dependencies:
-      '@a2a-js/sdk-v0_3': '@a2a-js/sdk@0.3.14(express@5.2.1)'
-      '@a2a-js/sdk-v1': '@a2a-js/sdk@1.0.1(express@5.2.1)'
+      '@a2a-js/sdk-v0_3': '@a2a-js/sdk@0.3.14(express@5.2.1(supports-color@10.2.2))'
+      '@a2a-js/sdk-v1': '@a2a-js/sdk@1.0.1(express@5.2.1(supports-color@10.2.2))'
       '@ai-sdk/provider-utils-v6': '@ai-sdk/provider-utils@4.0.40(zod@4.6.5)'
       '@ai-sdk/provider-utils-v7': '@ai-sdk/provider-utils@5.0.13(zod@4.6.5)'
       '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.3'
@@ -4083,7 +4188,7 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@mastra/schema-compat': 1.3.11-alpha.1(zod@4.6.5)
       '@standard-schema/spec': 1.1.0
-      chat: 4.41.0(zod@4.6.5)
+      chat: 4.41.0(supports-color@10.2.2)(zod@4.6.5)
       croner: 10.0.1
       dotenv: 17.4.2
       execa: 9.6.1
@@ -4121,16 +4226,16 @@ snapshots:
       - zod-openapi
       - zod-to-json-schema
 
-  '@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5)':
+  '@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5)':
     dependencies:
-      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       '@modelcontextprotocol/client': 2.0.0
       '@modelcontextprotocol/core': 2.0.0
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
       '@modelcontextprotocol/node': 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.8)
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.6.5)
       '@modelcontextprotocol/server': 2.0.0
-      '@modelcontextprotocol/server-legacy': 2.0.0(express@5.2.1)
+      '@modelcontextprotocol/server-legacy': 2.0.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
       exit-hook: 5.1.0
       fast-deep-equal: 3.1.3
     transitivePeerDependencies:
@@ -4148,17 +4253,17 @@ snapshots:
       zod: 4.6.5
       zod-from-json-schema: 0.5.6
 
-  '@mastra/server-adapters-test-suite@0.1.0-alpha.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5))(@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5))(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0)))(zod@4.6.5)':
+  '@mastra/server-adapters-test-suite@0.1.0-alpha.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@mastra/mcp@1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5))(@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5))(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0)))(zod@4.6.5)':
     dependencies:
-      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
-      '@mastra/mcp': 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1)(hono@4.13.8)(zod@4.6.5)
-      '@mastra/server': 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+      '@mastra/mcp': 1.18.0(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(supports-color@10.2.2)(zod@4.6.5)
+      '@mastra/server': 1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.4)(vite@8.3.0(@types/node@22.20.4)(jiti@2.7.0))
       zod: 4.6.5
 
-  '@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
+  '@mastra/server@1.68.0-alpha.10(@mastra/core@1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
     dependencies:
-      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+      '@mastra/core': 1.68.0-alpha.10(effect@4.0.0-rc.116)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       hono: 4.13.8
       zod: 4.6.5
 
@@ -4176,9 +4281,9 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)':
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.6.5)
       '@standard-schema/spec': 1.1.0
       zod: 4.6.5
 
@@ -4189,7 +4294,7 @@ snapshots:
     optionalDependencies:
       hono: 4.13.8
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.8)
       ajv: 8.20.0
@@ -4199,8 +4304,8 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      express: 5.2.1
-      express-rate-limit: 8.7.0(express@5.2.1)
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.7.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
       hono: 4.13.8
       jose: 6.2.12
       json-schema-typed: 8.0.2
@@ -4211,17 +4316,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-legacy@2.0.0(express@5.2.1)':
+  '@modelcontextprotocol/server-legacy@2.0.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@modelcontextprotocol/core': 2.0.0
       content-type: 1.0.5
       cors: 2.8.6
-      express-rate-limit: 8.7.0(express@5.2.1)
+      express-rate-limit: 8.7.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
       zod: 4.6.5
     optionalDependencies:
-      express: 5.2.1
+      express: 5.2.1(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -4484,7 +4589,7 @@ snapshots:
     dependencies:
       '@redis/client': 6.2.1(@opentelemetry/api@1.9.1)
 
-  '@release-it/conventional-changelog@12.0.2(conventional-commits-filter@6.0.1)(conventional-commits-parser@7.1.2)(release-it@21.1.0(@types/node@22.20.4))':
+  '@release-it/conventional-changelog@12.0.2(conventional-commits-filter@6.0.1)(conventional-commits-parser@7.1.2)(release-it@21.1.0(@types/node@22.20.4)(supports-color@10.2.2))':
     dependencies:
       '@conventional-changelog/git-client': 3.1.2(conventional-commits-filter@6.0.1)(conventional-commits-parser@7.1.2)
       concat-stream: 2.0.0
@@ -4492,7 +4597,7 @@ snapshots:
       conventional-changelog-angular: 9.4.0
       conventional-changelog-conventionalcommits: 10.4.0
       conventional-recommended-bump: 12.1.0
-      release-it: 21.1.0(@types/node@22.20.4)
+      release-it: 21.1.0(@types/node@22.20.4)(supports-color@10.2.2)
       semver: 7.8.5
     transitivePeerDependencies:
       - conventional-commits-filter
@@ -4551,35 +4656,35 @@ snapshots:
     dependencies:
       '@secretlint/types': 13.0.5
 
-  '@secretlint/config-loader@13.0.5':
+  '@secretlint/config-loader@13.0.5(supports-color@10.2.2)':
     dependencies:
       '@secretlint/profiler': 13.0.5
       '@secretlint/resolver': 13.0.5
       '@secretlint/types': 13.0.5
       ajv: 8.20.0
-      debug: 4.4.3
-      rc-config-loader: 4.1.4
+      debug: 4.4.3(supports-color@10.2.2)
+      rc-config-loader: 4.1.4(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/core@13.0.5':
+  '@secretlint/core@13.0.5(supports-color@10.2.2)':
     dependencies:
       '@secretlint/profiler': 13.0.5
       '@secretlint/types': 13.0.5
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       structured-source: 4.0.0
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/formatter@13.0.5':
+  '@secretlint/formatter@13.0.5(supports-color@10.2.2)':
     dependencies:
       '@secretlint/resolver': 13.0.5
       '@secretlint/types': 13.0.5
-      '@textlint/linter-formatter': 15.8.0
+      '@textlint/linter-formatter': 15.8.0(supports-color@10.2.2)
       '@textlint/module-interop': 15.8.0
       '@textlint/types': 15.8.0
       chalk: 5.6.2
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       pluralize: 8.0.0
       strip-ansi: 7.2.0
       table: 6.9.0
@@ -4587,15 +4692,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/node@13.0.5':
+  '@secretlint/node@13.0.5(supports-color@10.2.2)':
     dependencies:
-      '@secretlint/config-loader': 13.0.5
-      '@secretlint/core': 13.0.5
-      '@secretlint/formatter': 13.0.5
+      '@secretlint/config-loader': 13.0.5(supports-color@10.2.2)
+      '@secretlint/core': 13.0.5(supports-color@10.2.2)
+      '@secretlint/formatter': 13.0.5(supports-color@10.2.2)
       '@secretlint/profiler': 13.0.5
       '@secretlint/source-creator': 13.0.5
       '@secretlint/types': 13.0.5
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       p-map: 7.0.8
     transitivePeerDependencies:
       - supports-color
@@ -4656,14 +4761,14 @@ snapshots:
 
   '@textlint/ast-node-types@15.8.0': {}
 
-  '@textlint/linter-formatter@15.8.0':
+  '@textlint/linter-formatter@15.8.0(supports-color@10.2.2)':
     dependencies:
       '@azu/format-text': 1.0.2
       '@azu/style-format': 1.0.1
       '@textlint/module-interop': 15.8.0
       '@textlint/resolver': 15.8.0
       '@textlint/types': 15.8.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       js-yaml: 4.3.2
       lodash: 4.18.1
       pluralize: 2.0.0
@@ -4991,11 +5096,11 @@ snapshots:
     dependencies:
       editions: 6.22.0
 
-  body-parser@2.3.0:
+  body-parser@2.3.0(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       content-type: 2.1.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       http-errors: 2.0.1
       iconv-lite: 0.7.3
       on-finished: 2.4.1
@@ -5052,12 +5157,12 @@ snapshots:
 
   chardet@2.2.0: {}
 
-  chat@4.41.0(zod@4.6.5):
+  chat@4.41.0(supports-color@10.2.2)(zod@4.6.5):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
-      remark-gfm: 4.0.1
-      remark-parse: 11.0.0
+      remark-gfm: 4.0.1(supports-color@10.2.2)
+      remark-parse: 11.0.0(supports-color@10.2.2)
       remark-stringify: 11.0.0
       remend: 1.3.1
       unified: 11.0.5
@@ -5177,9 +5282,11 @@ snapshots:
 
   data-uri-to-buffer@8.0.0: {}
 
-  debug@4.4.3:
+  debug@4.4.3(supports-color@10.2.2):
     dependencies:
       ms: 2.1.3
+    optionalDependencies:
+      supports-color: 10.2.2
 
   decode-named-character-reference@1.3.0:
     dependencies:
@@ -5304,28 +5411,28 @@ snapshots:
 
   expect-type@1.4.0: {}
 
-  express-rate-limit@8.7.0(express@5.2.1):
+  express-rate-limit@8.7.0(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
-      express: 5.2.1
+      debug: 4.4.3(supports-color@10.2.2)
+      express: 5.2.1(supports-color@10.2.2)
       ip-address: 10.7.2
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1:
+  express@5.2.1(supports-color@10.2.2):
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0
+      body-parser: 2.3.0(supports-color@10.2.2)
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.2.2
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       depd: 2.0.0
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1
+      finalhandler: 2.1.1(supports-color@10.2.2)
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -5336,9 +5443,9 @@ snapshots:
       proxy-addr: 2.0.8
       qs: 6.16.0
       range-parser: 1.3.0
-      router: 2.2.0
-      send: 1.2.1
-      serve-static: 2.2.1
+      router: 2.2.0(supports-color@10.2.2)
+      send: 1.2.1(supports-color@10.2.2)
+      serve-static: 2.2.1(supports-color@10.2.2)
       statuses: 2.0.2
       type-is: 2.1.0
       vary: 1.1.2
@@ -5392,9 +5499,9 @@ snapshots:
     dependencies:
       is-unicode-supported: 2.1.0
 
-  finalhandler@2.1.1:
+  finalhandler@2.1.1(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -5445,11 +5552,11 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  get-uri@8.0.1:
+  get-uri@8.0.1(supports-color@10.2.2):
     dependencies:
       basic-ftp: 5.3.1
       data-uri-to-buffer: 8.0.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -5517,19 +5624,19 @@ snapshots:
       statuses: 2.0.2
       toidentifier: 1.0.1
 
-  http-proxy-agent@9.1.0:
+  http-proxy-agent@9.1.0(supports-color@10.2.2):
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       proxy-agent-negotiate: 1.1.0
     transitivePeerDependencies:
       - kerberos
       - supports-color
 
-  https-proxy-agent@9.1.0:
+  https-proxy-agent@9.1.0(supports-color@10.2.2):
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       proxy-agent-negotiate: 1.1.0
     transitivePeerDependencies:
       - kerberos
@@ -5785,14 +5892,14 @@ snapshots:
       unist-util-is: 6.0.1
       unist-util-visit-parents: 6.0.2
 
-  mdast-util-from-markdown@2.0.3:
+  mdast-util-from-markdown@2.0.3(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2
+      micromark: 4.0.2(supports-color@10.2.2)
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
@@ -5810,51 +5917,51 @@ snapshots:
       mdast-util-find-and-replace: 3.0.2
       micromark-util-character: 2.1.1
 
-  mdast-util-gfm-footnote@2.1.0:
+  mdast-util-gfm-footnote@2.1.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       mdast-util-to-markdown: 2.1.2
       micromark-util-normalize-identifier: 2.0.1
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm-strikethrough@2.0.0:
+  mdast-util-gfm-strikethrough@2.0.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm-table@2.0.0:
+  mdast-util-gfm-table@2.0.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
       markdown-table: 3.0.4
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm-task-list-item@2.0.0:
+  mdast-util-gfm-task-list-item@2.0.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm@3.1.0:
+  mdast-util-gfm@3.1.0(supports-color@10.2.2):
     dependencies:
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       mdast-util-gfm-autolink-literal: 2.0.1
-      mdast-util-gfm-footnote: 2.1.0
-      mdast-util-gfm-strikethrough: 2.0.0
-      mdast-util-gfm-table: 2.0.0
-      mdast-util-gfm-task-list-item: 2.0.0
+      mdast-util-gfm-footnote: 2.1.0(supports-color@10.2.2)
+      mdast-util-gfm-strikethrough: 2.0.0(supports-color@10.2.2)
+      mdast-util-gfm-table: 2.0.0(supports-color@10.2.2)
+      mdast-util-gfm-task-list-item: 2.0.0(supports-color@10.2.2)
       mdast-util-to-markdown: 2.1.2
     transitivePeerDependencies:
       - supports-color
@@ -6053,10 +6160,10 @@ snapshots:
 
   micromark-util-types@2.0.2: {}
 
-  micromark@4.0.2:
+  micromark@4.0.2(supports-color@10.2.2):
     dependencies:
       '@types/debug': 4.1.13
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       micromark-core-commonmark: 2.0.3
@@ -6199,16 +6306,16 @@ snapshots:
     dependencies:
       is-network-error: 1.3.2
 
-  pac-proxy-agent@9.1.0:
+  pac-proxy-agent@9.1.0(supports-color@10.2.2):
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3
-      get-uri: 8.0.1
-      http-proxy-agent: 9.1.0
-      https-proxy-agent: 9.1.0
+      debug: 4.4.3(supports-color@10.2.2)
+      get-uri: 8.0.1(supports-color@10.2.2)
+      http-proxy-agent: 9.1.0(supports-color@10.2.2)
+      https-proxy-agent: 9.1.0(supports-color@10.2.2)
       pac-resolver: 9.0.1(quickjs-wasi@2.2.0)
       quickjs-wasi: 2.2.0
-      socks-proxy-agent: 10.1.0
+      socks-proxy-agent: 10.1.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - kerberos
       - supports-color
@@ -6295,16 +6402,16 @@ snapshots:
 
   proxy-agent-negotiate@1.1.0: {}
 
-  proxy-agent@8.0.2:
+  proxy-agent@8.0.2(supports-color@10.2.2):
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3
-      http-proxy-agent: 9.1.0
-      https-proxy-agent: 9.1.0
+      debug: 4.4.3(supports-color@10.2.2)
+      http-proxy-agent: 9.1.0(supports-color@10.2.2)
+      https-proxy-agent: 9.1.0(supports-color@10.2.2)
       lru-cache: 7.18.3
-      pac-proxy-agent: 9.1.0
+      pac-proxy-agent: 9.1.0(supports-color@10.2.2)
       proxy-from-env: 2.1.0
-      socks-proxy-agent: 10.1.0
+      socks-proxy-agent: 10.1.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - kerberos
       - supports-color
@@ -6338,9 +6445,9 @@ snapshots:
       iconv-lite: 0.7.3
       unpipe: 1.0.0
 
-  rc-config-loader@4.1.4:
+  rc-config-loader@4.1.4(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       js-yaml: 4.3.2
       json5: 2.2.3
       require-from-string: 2.0.2
@@ -6379,7 +6486,7 @@ snapshots:
       - '@node-rs/xxhash'
       - '@opentelemetry/api'
 
-  release-it@21.1.0(@types/node@22.20.4):
+  release-it@21.1.0(@types/node@22.20.4)(supports-color@10.2.2):
     dependencies:
       '@inquirer/prompts': 8.7.2(@types/node@22.20.4)
       '@octokit/rest': 22.0.1
@@ -6397,7 +6504,7 @@ snapshots:
       open: 11.0.4
       ora: 9.4.1
       os-name: 7.0.0
-      proxy-agent: 8.0.2
+      proxy-agent: 8.0.2(supports-color@10.2.2)
       tinyglobby: 0.2.17
       undici: 7.29.0
       url-join: 5.0.0
@@ -6409,21 +6516,21 @@ snapshots:
       - magicast
       - supports-color
 
-  remark-gfm@4.0.1:
+  remark-gfm@4.0.1(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-gfm: 3.1.0
+      mdast-util-gfm: 3.1.0(supports-color@10.2.2)
       micromark-extension-gfm: 3.0.0
-      remark-parse: 11.0.0
+      remark-parse: 11.0.0(supports-color@10.2.2)
       remark-stringify: 11.0.0
       unified: 11.0.5
     transitivePeerDependencies:
       - supports-color
 
-  remark-parse@11.0.0:
+  remark-parse@11.0.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.3
+      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
       micromark-util-types: 2.0.2
       unified: 11.0.5
     transitivePeerDependencies:
@@ -6487,9 +6594,9 @@ snapshots:
 
   rou3@0.9.2: {}
 
-  router@2.2.0:
+  router@2.2.0(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
@@ -6507,15 +6614,15 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
-  secretlint@13.0.5:
+  secretlint@13.0.5(supports-color@10.2.2):
     dependencies:
       '@secretlint/config-creator': 13.0.5
-      '@secretlint/formatter': 13.0.5
-      '@secretlint/node': 13.0.5
+      '@secretlint/formatter': 13.0.5(supports-color@10.2.2)
+      '@secretlint/node': 13.0.5(supports-color@10.2.2)
       '@secretlint/profiler': 13.0.5
       '@secretlint/resolver': 13.0.5
       '@secretlint/walker': 13.0.5
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       read-pkg: 10.1.0
     transitivePeerDependencies:
       - supports-color
@@ -6527,9 +6634,9 @@ snapshots:
 
   semver@7.8.5: {}
 
-  send@1.2.1:
+  send@1.2.1(supports-color@10.2.2):
     dependencies:
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -6543,12 +6650,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@2.2.1:
+  serve-static@2.2.1(supports-color@10.2.2):
     dependencies:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1
+      send: 1.2.1(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -6602,10 +6709,10 @@ snapshots:
 
   smart-buffer@4.2.0: {}
 
-  socks-proxy-agent@10.1.0:
+  socks-proxy-agent@10.1.0(supports-color@10.2.2):
     dependencies:
       agent-base: 9.0.0
-      debug: 4.4.3
+      debug: 4.4.3(supports-color@10.2.2)
       socks: 2.8.10
     transitivePeerDependencies:
       - supports-color

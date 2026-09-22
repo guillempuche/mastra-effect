@@ -30,3 +30,29 @@ allowBuilds:
 # Renovate is configured with a longer window still, so it never opens a PR for a
 # version pnpm would then refuse to install.
 minimumReleaseAge: 1440
+
+# The Mastra packages are exempt. This adapter exists to track their release line, its
+# conformance suite is theirs and runs on every install, and they publish continuously — so the
+# newest version that has aged in is frequently a prerelease. Left gated, a range honest enough
+# to say `^1.68.0` cannot resolve at all for a day after each release, and the tempting fix is a
+# prerelease floor that silently resolves to an alpha with no warning at all. The quiet period
+# earns its keep against long-tail transitive dependencies, not against the one package this is
+# built on and exhaustively tested against.
+minimumReleaseAgeExclude:
+  - '@mastra/*'
+
+# Local resolution only — never published, and deliberately behind the range this package
+# declares to consumers.
+#
+# `dependencies` says `@mastra/server: ^1.68.0`, which is the honest contract: a consumer should
+# get the stable line. But the pinned conformance suite (0.1.0-alpha.0) asserts that every
+# non-excluded route answers under 400, and stable 1.68.0 changed `POST /auth/logout` to reply
+# `404 {"error":"Logout not configured"}` when no logout provider is configured. The suite
+# already excludes the auth routes that need providers — sso/login, credentials/sign-in, refresh
+# and others — but not logout, so it fails on a route the adapter forwards perfectly correctly.
+#
+# Testing therefore runs against the version pair the suite was built for. Remove this the moment
+# a suite release covers the stable line.
+overrides:
+  '@mastra/server': 1.68.0-alpha.10
+  '@mastra/core': 1.68.0-alpha.10
