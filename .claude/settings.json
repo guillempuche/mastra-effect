@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "ralph-wiggum@claude-plugins-official": true,
+    "commit@ai-standards": true,
+    "pr@ai-standards": true,
+    "readability-improver@ai-standards": true
+  }
+}
