@@ -1,7 +1,8 @@
 /** @type {import("syncpack").RcFile} */
 export default {
-  // The example is not a pnpm workspace member — it links the library by path —
-  // so syncpack has to be told where to look.
+  // Stated explicitly rather than relying on discovery, so this keeps working if the
+  // workspace layout changes. The example is a workspace member; the library itself is the
+  // root, which some discovery modes skip.
   source: ['package.json', 'examples/*/package.json'],
 
   versionGroups: [
