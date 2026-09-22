@@ -85,5 +85,5 @@ export const serve = (router: EffectRouter, port: number) =>
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT ?? 3000);
   const router = await buildServer({ baseURL: `http://localhost:${port}` });
-  await Effect.runPromise(Layer.launch(serve(router, port)) as Effect.Effect<never, unknown, never>);
+  await Effect.runPromise(Layer.launch(serve(router, port)));
 }
