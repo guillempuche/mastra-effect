@@ -58,22 +58,23 @@ to.
 
 ---
 
-## The test suite needs the `@mastra/core` alpha line
+## Testing runs against an older Mastra than the package declares
 
-`@mastra/server-adapters-test-suite` declares a peer range of `>=1.64.0-0`, but its
-`createDefaultTestContext` spies on an observability-store method that only exists on the
-`1.68.0-alpha` line. Installing stable `1.67.0` satisfies the declared range and then fails ~1200
-tests behind a `vi.spyOn` TypeError that points nowhere useful.
+Every manifest declares `@mastra/*` at `^1.68.0`, which is what a consumer should get. Tests run
+against `1.68.0-alpha.10`, pinned by `overrides` in `pnpm-workspace.yaml`.
 
-`@mastra/core` and `@mastra/server` are pinned to exact alpha versions for this reason — **bump them
-as a pair**, never one alone.
+The reason is a single route. The pinned conformance suite (`0.1.0-alpha.0`) asserts that every
+route it does not explicitly exclude answers under 400, and stable `1.68.0` changed
+`POST /auth/logout` to reply `404 {"error":"Logout not configured"}` when no logout provider is
+configured. The suite already excludes the auth routes that need providers — `sso/login`,
+`credentials/sign-in`, `refresh` and others — but not `logout`, so it fails on a route this adapter
+forwards perfectly correctly. Worth reporting upstream.
 
-The suite must also stay listed in `server.deps.inline` in `vitest.config.ts`. It calls `vi.mock` at
-module scope, and vitest only hoists that in files it transforms; `node_modules` is externalised by
-default. In the Mastra monorepo the suite is a workspace *source* package, so no in-tree adapter ever
-hits this and no upstream doc mentions it.
+Remove the override once a suite release covers the stable line, and re-run the suite to confirm.
 
----
+**Do not turn the declared range back into a prerelease floor.** `^1.68.0-alpha.10` looks harmless
+and is not: a consumer using `minimumReleaseAge` has the fresh stable gated out while the older
+alpha still satisfies the range, so pnpm silently resolves the prerelease and says nothing.
 
 ## Route handlers must not surface a typed error
 

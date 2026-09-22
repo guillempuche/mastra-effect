@@ -1,29 +1,35 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:best-practices", ":dependencyDashboard"],
-  "schedule": ["before 6am on monday"],
+  "extends": [
+    "config:best-practices",
+    ":dependencyDashboard"
+  ],
+  "schedule": [
+    "before 6am on monday"
+  ],
   "prConcurrentLimit": 3,
-
   "description": [
     "minimumReleaseAge is longer than pnpm's own floor, so Renovate never opens a PR for a version pnpm would then refuse to resolve. It is also the window in which a compromised release is usually caught.",
-    "ignoreUnstable is off because this package tracks prerelease lines on purpose - effect on `rc`, Mastra on `alpha`. Renovate ignores unstable versions by default, which here would mean doing nothing at all."
+    "ignoreUnstable is off because effect tracks the rc dist-tag on purpose. Mastra is followed on its stable line; the alpha is pinned locally by a pnpm override for testing only, which Renovate does not manage."
   ],
   "minimumReleaseAge": "3 days",
   "ignoreUnstable": false,
-
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on the first day of the month"]
+    "schedule": [
+      "before 6am on the first day of the month"
+    ]
   },
-
   "packageRules": [
     {
       "description": "Peer ranges are a compatibility contract with consumers, not a version this repo runs. Widening one is a release decision and narrowing one breaks everybody already installed, so no bot touches them.",
-      "matchDepTypes": ["peerDependencies"],
+      "matchDepTypes": [
+        "peerDependencies"
+      ],
       "enabled": false
     },
     {
-      "description": "@mastra/core and @mastra/server must move together - a single bump leaves a tree where the conformance suite fails for reasons that look nothing like the cause. The test suite is versioned alongside them, so it joins the same PR.",
+      "description": "@mastra/core and @mastra/server must move together - a single bump leaves a tree where the conformance suite fails for reasons that look nothing like the cause. Tracked on the stable line; the testing override in pnpm-workspace.yaml is separate and deliberate.",
       "matchPackageNames": [
         "@mastra/core",
         "@mastra/server",
@@ -31,42 +37,58 @@
         "@mastra/server-adapters-test-suite"
       ],
       "groupName": "mastra",
-      "followTag": "alpha",
-      "rangeStrategy": "pin"
+      "rangeStrategy": "replace"
     },
     {
       "description": "Effect and its companion packages are released together on the rc line and must stay on one version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs a `git subtree pull` that no bot can do, which CI asserts.",
-      "matchPackageNames": ["effect", "@effect/**"],
+      "matchPackageNames": [
+        "effect",
+        "@effect/**"
+      ],
       "groupName": "effect",
       "followTag": "rc",
       "rangeStrategy": "pin"
     },
     {
       "description": "A dependency range this repo publishes. Raising the floor forces an upgrade on every consumer, so it is only right when the code starts using a newer API - a human call.",
-      "matchDepTypes": ["dependencies"],
+      "matchDepTypes": [
+        "dependencies"
+      ],
       "rangeStrategy": "widen"
     },
     {
       "description": "Tooling is low-risk and noisy, so batch it. matchDepTypes already scopes the rule, and the negations carve out the packages handled by their own rules above - a `**` cannot be added alongside them, since Renovate rejects a wildcard combined with other patterns.",
-      "matchDepTypes": ["devDependencies"],
-      "matchPackageNames": ["!effect", "!@effect/**", "!@mastra/**"],
+      "matchDepTypes": [
+        "devDependencies"
+      ],
+      "matchPackageNames": [
+        "!effect",
+        "!@effect/**",
+        "!@mastra/**"
+      ],
       "groupName": "dev tooling"
     },
     {
       "description": "vitest must stay on 4.x: @mastra/server-adapters-test-suite declares a peer range of >=4.0.0 <5.0.0, and 5.x silently breaks the conformance suites this package is verified by.",
-      "matchPackageNames": ["vitest", "@vitest/**"],
+      "matchPackageNames": [
+        "vitest",
+        "@vitest/**"
+      ],
       "allowedVersions": "<5.0.0"
     },
     {
       "description": "@types/node tracks the engines floor this package claims rather than the newest release, so nothing typechecks against APIs the minimum supported runtime lacks.",
-      "matchPackageNames": ["@types/node"],
+      "matchPackageNames": [
+        "@types/node"
+      ],
       "allowedVersions": "<23.0.0"
     }
   ],
-
   "vulnerabilityAlerts": {
     "description": "A published fix for a real vulnerability outranks the quiet period.",
     "minimumReleaseAge": null,
-    "schedule": ["at any time"]
+    "schedule": [
+      "at any time"
+    ]
   }
 }

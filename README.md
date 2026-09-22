@@ -27,7 +27,7 @@ MCP transports and multipart as unverified until that lands.
 ## Install
 
 ```bash
-pnpm add @guillem_puche/mastra-effect effect @mastra/core
+pnpm add @guillem_puche/mastra-effect effect@rc @mastra/core zod
 ```
 
 Requires Node >= 22.13 and `effect@>=4.0.0-rc.116`.
