@@ -76,10 +76,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/guillempuche/mastra-effect-adapter.git"
+    "url": "git+https://github.com/guillempuche/mastra-effect.git"
   },
   "bugs": {
-    "url": "https://github.com/guillempuche/mastra-effect-adapter/issues"
+    "url": "https://github.com/guillempuche/mastra-effect/issues"
   },
   "publishConfig": {
     "access": "public"
