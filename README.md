@@ -83,4 +83,6 @@ Two behaviours differ from what you might expect coming from the Effect beta or 
 
 ## License
 
-Apache-2.0
+Apache-2.0 — matching Mastra, from whose in-tree adapters parts of this one are derived. See
+[NOTICE](NOTICE) for what was carried over and from where. Effect itself is MIT and is a peer
+dependency, not redistributed here.
