@@ -10,8 +10,13 @@ principally @mastra/elysia (server-adapters/elysia). The behaviour carried over
 includes the stream framing for both SSE and record-separated formats, the
 error-swallowing forwarding stream, the stripping of Transfer-Encoding from a
 forwarded response, the structure of the responseType dispatch, and the decision
-not to await the MCP transport start call. Those portions remain under the
-Apache License, Version 2.0.
+not to await the MCP transport start call. Further portions follow @mastra/hono
+(server-adapters/hono): propagating a client disconnect to an MCP transport
+(from its mcp-disconnect.ts), carrying the caller's auth into MCP transports,
+answering a failed MCP transport start with a server error, closing a stream
+that fails partway, reading every value of a repeated query key, reading the
+requestContext query parameter on POST, and passing an error's failingItems
+through. Those portions remain under the Apache License, Version 2.0.
 
 This package depends on Effect (https://github.com/Effect-TS/effect), which is
 licensed under the MIT License and is a peer dependency rather than redistributed

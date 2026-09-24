@@ -1,16 +1,24 @@
-# pnpm 11 reads its settings from here, not from .npmrc — only auth and registry
+# pnpm reads its settings from here, not from .npmrc — only auth and registry
 # settings still come from .npmrc.
 
-# The example is a real member of this workspace. Left out, `pnpm install` inside its directory
+# The examples are real members of this workspace. Left out, `pnpm install` inside one of them
 # resolves to the root workspace, reports "Already up to date" and installs nothing — so its
 # dependencies are simply absent and every import fails to resolve.
 packages:
   - examples/*
 
+# Recursive runs (`pnpm -r test`) go one package at a time. Each example builds the library before
+# it runs, so that it works on a fresh clone, and each build leaves dist/ without its type
+# declarations for about 400ms. In parallel, an example type-checked inside that window fails with
+# "Cannot find module '@guillem_puche/mastra-effect'". Rare — once in 14 parallel runs when
+# measured — but a red CI run for no reason costs more than the seconds this adds.
+# Set here rather than as a flag, because a flag someone forgets brings the race back silently.
+workspaceConcurrency: 1
+
 # Deny every dependency lifecycle script. An install-time script is the primary
 # malware vector in a compromised release, and auditing this tree found that
-# nothing in it declares install, preinstall or postinstall at all — so the
-# allowlist is empty by evidence rather than by optimism.
+# nothing in it but lefthook declares install, preinstall or postinstall — so the
+# allowlist holds that one entry by evidence rather than by optimism.
 #
 # If a future dependency genuinely needs to build, pnpm will say so: add that one
 # package here rather than reaching for dangerouslyAllowAllBuilds.
@@ -32,7 +40,7 @@ allowBuilds:
 minimumReleaseAge: 1440
 
 # The Mastra packages are exempt. This adapter exists to track their release line, its
-# conformance suite is theirs and runs on every install, and they publish continuously — so the
+# conformance suite is theirs and runs on every test run, and they publish continuously — so the
 # newest version that has aged in is frequently a prerelease. Left gated, a range honest enough
 # to say `^1.68.0` cannot resolve at all for a day after each release, and the tempting fix is a
 # prerelease floor that silently resolves to an alpha with no warning at all. The quiet period
@@ -41,18 +49,10 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@mastra/*'
 
-# Local resolution only — never published, and deliberately behind the range this package
-# declares to consumers.
-#
-# `dependencies` says `@mastra/server: ^1.68.0`, which is the honest contract: a consumer should
-# get the stable line. But the pinned conformance suite (0.1.0-alpha.0) asserts that every
-# non-excluded route answers under 400, and stable 1.68.0 changed `POST /auth/logout` to reply
-# `404 {"error":"Logout not configured"}` when no logout provider is configured. The suite
-# already excludes the auth routes that need providers — sso/login, credentials/sign-in, refresh
-# and others — but not logout, so it fails on a route the adapter forwards perfectly correctly.
-#
-# Testing therefore runs against the version pair the suite was built for. Remove this the moment
-# a suite release covers the stable line.
-overrides:
-  '@mastra/server': 1.68.0-alpha.10
-  '@mastra/core': 1.68.0-alpha.10
+# Mastra's conformance suite declares `@mastra/mcp <2`, yet its MCP transport tests assert 2.x
+# behaviour — a legacy SSE endpoint that answers 404, which only a 2.x server does — and the Mastra
+# monorepo runs it against 2.x. So it runs against 2.x here too. This accepts exactly that pairing;
+# every other peer mismatch still warns. 1.x servers are tested through the `@mastra/mcp-v1` alias.
+peerDependencyRules:
+  allowedVersions:
+    '@mastra/server-adapters-test-suite>@mastra/mcp': '2'

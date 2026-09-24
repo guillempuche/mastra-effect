@@ -6,7 +6,7 @@ import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
 import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
-import type { Auth } from './auth';
+import type { Auth } from './auth.ts';
 
 const echo = createTool({
   id: 'echo',

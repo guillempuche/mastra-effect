@@ -1,12 +1,20 @@
-# mastra-in-an-effect-server
+# full-app
 
-Effect owns the HTTP server. Mastra's routes, Better Auth and the Scalar docs page all mount onto
-the router the app created.
+A production-shaped app: Effect owns the HTTP server, and Mastra, Better Auth, MCP, OpenTelemetry
+and a Scalar API-docs page all live on the one router the app created.
+
+**Use this when** you want to see how the pieces fit together in a real app, or need one of them —
+auth in [`src/auth.ts`](src/auth.ts), telemetry in [`src/observability.ts`](src/observability.ts),
+API docs in [`src/scalar.ts`](src/scalar.ts).
+
+**Look elsewhere when** you want the adapter on its own, without the rest → [`minimal`](../minimal) or
+[`alongside-your-routes`](../alongside-your-routes), which this example builds on.
 
 ```bash
-pnpm install
-pnpm test    # BDD tests — no database, no API keys, no containers
-pnpm dev     # http://localhost:3000
+pnpm install              # once, from the repository root
+cd examples/full-app
+pnpm test                 # BDD tests — no database, no API keys, no containers
+pnpm dev                  # http://localhost:3000
 ```
 
 | Path | Served by |
@@ -20,10 +28,11 @@ pnpm dev     # http://localhost:3000
 ## What it shows
 
 **The app owns the router.** `createRouter()` is called here, the app adds its own routes to it, and
-the *same instance* is handed to `new MastraServer({ app: router })`. That composes because the
-adapter binds `TApp` to a live `HttpRouter` service rather than a Layer, so Mastra's routes join the
-app's on one port, one router, one middleware stack. Use `createMastraServer()` instead only when
-you want Mastra to own the server.
+the *same instance* is handed to `new MastraServer({ app: router })`. Mastra does not bring a router
+of its own: it adds each of its ~400 routes to the app's, so everything shares one port, one router
+and one middleware stack. [`alongside-your-routes`](../alongside-your-routes) shows this pattern on
+its own; [`mounted-as-one-route`](../mounted-as-one-route) shows the alternative, Mastra behind a
+single route.
 
 **One identity system, two consumers.** `betterAuth()` is constructed in [`auth.ts`](src/auth.ts) by
 the app, because the app needs a handle on it to mount `/auth/*`. The same instance is passed to
@@ -87,7 +96,8 @@ The endpoint is not a secret; the headers carry the vendor key and are.
 
 ## Two things worth copying
 
-`public: ['/api/openapi.json']` on the auth provider. Mastra serves its OpenAPI document as an
+`'/api/openapi.json'` in the auth provider's `public` list (see [`src/mastra.ts`](src/mastra.ts), which
+also keeps `/api` and `/api/auth/*` public). Mastra serves its OpenAPI document as an
 ordinary route under `/api/*`, which the default config protects — leave it alone and `/docs` loads
 for anonymous visitors while its spec fetch returns 401. A test covers this.
 

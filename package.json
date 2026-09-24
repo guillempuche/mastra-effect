@@ -33,6 +33,7 @@
     "release:dry": "release-it --dry-run",
     "lint-secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "lint-deps": "syncpack lint",
+    "lint-vendor": "node scripts/check-vendored-effect.mjs",
     "fix-deps": "syncpack fix"
   },
   "license": "Apache-2.0",
@@ -41,19 +42,21 @@
     "fetch-to-node": "^2.1.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.64.0-0 <2.0.0-0",
-    "effect": ">=4.0.0-rc.116 <5",
+    "@mastra/core": ">=1.68.0 <2.0.0-0",
+    "effect": ">=4.0.0-rc.117 <5",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "^0.18.5",
+    "@effect/platform-node": "4.0.0-rc.117",
     "@mastra/core": "^1.68.0",
-    "@mastra/mcp": "^1.18.0",
-    "@mastra/server-adapters-test-suite": "0.1.0-alpha.0",
+    "@mastra/mcp": "^2.0.0",
+    "@mastra/mcp-v1": "npm:@mastra/mcp@^1.18.0",
+    "@mastra/server-adapters-test-suite": "0.1.0",
     "@release-it/conventional-changelog": "^12.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.5",
     "@types/node": "^22.20.1",
-    "effect": "4.0.0-rc.116",
+    "effect": "4.0.0-rc.117",
     "lefthook": "^2.1.14",
     "oxlint": "^1.0.0",
     "publint": "^0.3.24",

@@ -13,6 +13,8 @@
     "module": "Preserve",
     "moduleResolution": "bundler",
     "noEmit": true,
+    // Node runs these files directly (`pnpm dev`) and needs real extensions in imports.
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023"],
     "types": ["node"]
   },

@@ -1,0 +1,27 @@
+{
+  "name": "@guillem_puche/example-fetch-handler",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mastra as a plain fetch handler, for Bun, Deno, Cloudflare Workers or a Next.js route, with no Effect server",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm --filter @guillem_puche/mastra-effect build",
+    "pretypecheck": "pnpm --filter @guillem_puche/mastra-effect build"
+  },
+  "dependencies": {
+    "@guillem_puche/mastra-effect": "workspace:*",
+    "@mastra/core": "^1.68.0",
+    "effect": "4.0.0-rc.117",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -1,7 +1,7 @@
 import { toWebHandler, type EffectRouter } from '@guillem_puche/mastra-effect';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { buildServer } from './server';
+import { buildServer } from './server.ts';
 
 const ORIGIN = 'http://localhost:3000';
 
