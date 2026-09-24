@@ -35,22 +35,30 @@ pnpm lint          # oxlint
 - `src/router-collision.test.ts` — records how Effect's router resolves Mastra's four
   same-prefix/different-param-name route pairs. A tripwire, not a feature test.
 - `src/conformance.test.ts` — wiring for all six of Mastra's published conformance suites.
+- `src/effect-integration.test.ts` — what crosses from Mastra back into Effect: `MastraRouteError` in
+  the error channel, and `runInRequest` giving tools and steps the app's services and span.
 - `src/regressions.test.ts`, `src/request-body.test.ts`, `src/request-response.test.ts`,
   `src/cancellation.test.ts`, `src/mcp.test.ts` — what the suites do not reach, each case a defect
   that was reproduced before it was fixed. `src/test-support.ts` holds their shared helpers: the
   router served through a fetch handler, and on a real Node server.
 - `scripts/check-vendored-effect.mjs` — `pnpm lint-vendor`, run by CI and the pre-push hook.
+- `scripts/update-vendored-effect.sh` — updates `docs/repos/effect` as one linear commit; see below.
 - `examples/*` — one runnable app per use case, each a workspace member with its own tests. Which
   example covers what is listed once, in the README's Examples table; read that rather than
   opening examples at random.
 - `docs/repos/effect` — Effect source vendored as a squashed `git subtree`, pinned to the tag the
   adapter compiles against. Read it instead of guessing at `unstable/http` internals.
 
-Update the vendored source with:
+Update the vendored source with the script, never with `git subtree pull` on its own:
 
 ```bash
-git subtree pull --prefix docs/repos/effect https://github.com/Effect-TS/effect.git effect@<tag> --squash
+scripts/update-vendored-effect.sh 4.0.0-rc.118   # the Effect version, without the `effect@` prefix
 ```
+
+`git subtree pull --squash` makes a merge commit, and `main` requires linear history, so that commit
+could never land. The script runs the same pull, then leaves its changes staged for one ordinary
+commit and prints the two `git-subtree-*` trailer lines that commit must end with — they are how the
+next pull finds where this one left off.
 
 ---
 
@@ -114,5 +122,9 @@ several of the defects fixed here (repeated query keys, MCP start failures, `fai
 client-disconnect handling is ported from it; NOTICE records what came from where.
 
 When an Effect upgrade lands, the vendored subtree has to follow by hand — no bot can run
-`git subtree pull`, so a dependency PR that bumps `effect` fails `pnpm lint-vendor` until someone
-does.
+`scripts/update-vendored-effect.sh`, so a dependency PR that bumps `effect` fails `pnpm lint-vendor`
+until someone does.
+
+Code that works around an upstream bug says so where it does it, with the issue link, so it can go
+once the issue is fixed. Search for `github.com/mastra-ai/mastra/issues` and
+`github.com/Effect-TS/effect/issues` before an upgrade.

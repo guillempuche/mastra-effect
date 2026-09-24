@@ -40,9 +40,11 @@ it, then update the vendored subtree to match — `pnpm lint-vendor` fails until
 `src/effect-api-gate.ts` still compiles:
 
 ```bash
-git subtree pull --prefix docs/repos/effect https://github.com/Effect-TS/effect.git effect@<tag> --squash
+scripts/update-vendored-effect.sh <version>   # stages the update; commit it with the trailers it prints
 pnpm lint-vendor && pnpm typecheck
 ```
+
+Never run `git subtree pull` on its own: it makes a merge commit, which `main` refuses.
 
 Also re-run `src/router-collision.test.ts`; it records router behaviour that a vendored FindMyWay
 change could flip.
