@@ -4,9 +4,16 @@
  *
  * Pinned at effect@4.0.0-rc.117.
  */
-import { Effect, Exit, Layer, type Scope, Stream } from 'effect';
+import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, Stream, type Tracer } from 'effect';
 import { Sse } from 'effect/unstable/encoding';
-import { Cookies, HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
+import {
+  Cookies,
+  HttpRouter,
+  HttpServerError,
+  HttpServerRequest,
+  HttpServerRespondable,
+  HttpServerResponse,
+} from 'effect/unstable/http';
 
 // A live, imperatively-mutable router instance. This is what `TApp` binds to: Mastra's
 // `registerRoutes()` awaits ~400 sequential `registerRoute` calls against one fixed app,
@@ -14,7 +21,9 @@ import { Cookies, HttpRouter, HttpServerError, HttpServerRequest, HttpServerResp
 const router: HttpRouter.HttpRouter = Effect.runSync(HttpRouter.make);
 
 // `add` returns an Effect. With E = never and R = never it is runnable standalone, which is
-// what lets `registerRoute` bridge Effect -> Promise once per route.
+// what lets `registerRoute` bridge Effect -> Promise once per route. The adapter's handlers can
+// fail with `MastraRouteError`, which `add` records as a requirement; `addRoute` in index.ts drops
+// it again, since that error answers with its own response.
 const registration: Effect.Effect<void, never, never> = router.add(
   'GET',
   '/probe/:id',
@@ -77,3 +86,22 @@ export const cachedBody = (request: HttpServerRequest.HttpServerRequest) => ({
   bytes: request.arrayBuffer,
   text: request.text,
 });
+
+// MastraRouteError: a tagged error that answers with its own response when nothing handles it.
+export class RespondingError
+  extends Data.TaggedError('RespondingError')<{ readonly response: HttpServerResponse.HttpServerResponse }>
+  implements HttpServerRespondable.Respondable
+{
+  [HttpServerRespondable.symbol]() {
+    return Effect.succeed(this.response);
+  }
+}
+
+// The request's span, read inside a route handler and handed to Effect code Mastra runs later.
+export const requestSpan: Effect.Effect<Option.Option<Tracer.AnySpan>> = Effect.option(Effect.currentParentSpan);
+export const runUnder = <A, E, R>(
+  runtime: ManagedRuntime.ManagedRuntime<R, never>,
+  effect: Effect.Effect<A, E, R>,
+  span: Tracer.AnySpan,
+  signal: AbortSignal,
+): Promise<A> => runtime.runPromise(Effect.withParentSpan(effect, span), { signal });

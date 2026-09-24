@@ -20,20 +20,42 @@ the router you already own — Mastra does not take the server over. A client th
 the Mastra work it started, so an abandoned agent stops calling its model, and with a tracer
 installed every request gets a server span carrying its route pattern.
 
-What does not cross over: Mastra's agents, tools and workflow steps run as ordinary promises, outside
-the request's fiber. They cannot `yield*` your Effect services, and their own work does not nest
-under the request's span. To reach your services from inside Mastra, run them through one shared
-runtime:
+Mastra itself runs its agents, tools and workflow steps as ordinary promises, outside the request's
+fiber. Three things cross back into Effect:
 
-```ts
-const runtime = ManagedRuntime.make(AppServicesLive);
+- **Server errors.** A route that answers with a 5xx also fails the Effect request, as a
+  `MastraRouteError` that answers with Mastra's own response. Clients see no difference; your
+  middleware can `catchTag('MastraRouteError')`, and your logs and traces record the failure. A 4xx
+  stays a normal response. `new MastraServer({ errorChannel: false })` turns this off.
 
-const findUser = createTool({
-  id: 'find-user',
-  inputSchema: z.object({ id: z.string() }),
-  execute: ({ id }) => runtime.runPromise(Users.find(id)),
-});
-```
+  Like any failed Effect request, these skip middleware that changes the response with `Effect.map`.
+  To touch every answer, use a pre-response handler, as Effect's CORS middleware does —
+  [`alongside-your-routes`](examples/alongside-your-routes) shows one.
+- **Your services and the request's span, inside tools and steps.** `runInRequest` runs Effect code
+  from a tool or step through your own runtime, with the HTTP request's span as its parent, and
+  interrupts it when Mastra's abort signal fires:
+
+  ```ts
+  const runtime = ManagedRuntime.make(AppServicesLive);
+
+  const findUser = createTool({
+    id: 'find-user',
+    inputSchema: z.object({ id: z.string() }),
+    execute: (input, context) => runInRequest(runtime, Users.find(input.id), context),
+  });
+  ```
+
+  For a tool an agent calls, that signal fires when the client leaves. A workflow step's belongs
+  to the run and fires only when the run is cancelled. The spans that code creates are made by the
+  runtime's own tracer, so give the runtime your tracer as well, or they are never exported. With
+  OpenTelemetry, `runtimeTracing` in [`examples/full-app`](examples/full-app/src/observability.ts)
+  does this.
+
+- **Mastra's own spans.** With Mastra's OpenTelemetry bridge, agent runs, model calls with token
+  counts and tool calls land in the same trace as the HTTP request, under its span.
+  [`examples/full-app`](examples/full-app) sets this up. It needs the tracer provider registered
+  globally, which Effect's `NodeSdk.layer` does not do by itself
+  ([mastra-ai/mastra#24950](https://github.com/mastra-ai/mastra/issues/24950)).
 
 ## Install
 
@@ -135,7 +157,10 @@ shows it and compares the two.
 | `createRouter(config?)` | An empty `HttpRouter` to hand to `new MastraServer({ app })`. Takes a partial `FindMyWay.RouterConfig` |
 | `MastraServer` | The adapter itself, for when you own the router and the lifecycle |
 | `toWebHandler(router, options?)` | `{ handler, dispose }` — a fetch handler over a populated router. `options.disableLogger` stops Effect logging each request |
-| `EffectRouter`, `EffectRequestContext`, `CreateMastraServerOptions`, `ToolsInput` | Types |
+| `runInRequest(runtime, effect, context)` | Runs Effect code from a Mastra tool or workflow step: your runtime's services, the request's span as parent, Mastra's abort signal |
+| `requestSpan(requestContext)` | The HTTP request's Effect span, from a tool's or step's request context; `undefined` without a tracer |
+| `MastraRouteError` | What a route's server error (5xx) becomes in Effect's error channel. Answers with Mastra's own response |
+| `EffectRouter`, `EffectRequestContext`, `MastraServerOptions`, `CreateMastraServerOptions`, `ToolsInput` | Types |
 
 ## Status
 

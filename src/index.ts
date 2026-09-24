@@ -13,9 +13,16 @@ import {
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
-import { Effect, Exit, Layer, type Scope } from 'effect';
+import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, type Tracer } from 'effect';
 import type { FindMyWay } from 'effect/unstable/http';
-import { Cookies, HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
+import {
+  Cookies,
+  HttpRouter,
+  HttpServerError,
+  HttpServerRequest,
+  HttpServerRespondable,
+  HttpServerResponse,
+} from 'effect/unstable/http';
 import { toFetchResponse, toReqRes } from 'fetch-to-node';
 
 export type EffectRouter = HttpRouter.HttpRouter;
@@ -239,6 +246,61 @@ function effectMethod(method: string, path: string): 'GET' | 'POST' | 'PUT' | 'P
 }
 
 /**
+ * A Mastra route that failed with a server error (5xx), surfaced in Effect's error channel.
+ *
+ * It answers with exactly the response Mastra built, so clients see no difference. What changes is
+ * what the app's Effect code sees: middleware can `catchTag('MastraRouteError')`, Effect's logger
+ * records the cause, and a tracer marks the request span as failed. 4xx answers stay successes —
+ * a refused or invalid request is not a server failure.
+ */
+export class MastraRouteError
+  extends Data.TaggedError('MastraRouteError')<{
+    /** The HTTP status Mastra answered with. */
+    readonly status: number;
+    /**
+     * What the route threw. When Mastra answered the failure before it reached the adapter — a custom
+     * route's handler, whose errors Mastra's own sub-app answers, or an MCP transport that failed to
+     * start — an `Error` naming the request and the status instead.
+     */
+    readonly cause: unknown;
+    /** The response Mastra built for it, sent unchanged. */
+    readonly response: HttpServerResponse.HttpServerResponse;
+  }>
+  implements HttpServerRespondable.Respondable
+{
+  override get message(): string {
+    return this.cause instanceof Error ? this.cause.message : String(this.cause);
+  }
+
+  [HttpServerRespondable.symbol]() {
+    return Effect.succeed(this.response);
+  }
+}
+
+/** The error a route threw, keyed by the response it was turned into. */
+const routeErrors = new WeakMap<Response, unknown>();
+
+/**
+ * The key under which the request's Effect span is stored in Mastra's `RequestContext`.
+ *
+ * Stored as a function on purpose: `RequestContext` drops functions when it is serialised, so the span
+ * never lands in a workflow snapshot, and a client sending `requestContext` as JSON cannot supply one.
+ */
+const REQUEST_SPAN_KEY = 'mastraEffect.requestSpan';
+
+/** Everything `new MastraServer(...)` takes: Mastra's adapter options, plus this adapter's own. */
+export type MastraServerOptions = ConstructorParameters<
+  typeof MastraServerBase<EffectRouter, EffectRequestContext, EffectRequestContext>
+>[0] & {
+  /**
+   * Fail the Effect request with a `MastraRouteError` when a route answers with a server error
+   * (5xx), so the app's Effect error handling, logs and traces see it. The response is the same
+   * either way. Defaults to `true`.
+   */
+  readonly errorChannel?: boolean;
+};
+
+/**
  * Mastra server adapter for Effect's HTTP layer.
  *
  * `TApp` is a live `HttpRouter` service instance rather than a Layer: Mastra's `registerRoutes()`
@@ -247,6 +309,13 @@ function effectMethod(method: string, path: string): 'GET' | 'POST' | 'PUT' | 'P
  */
 export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestContext, EffectRequestContext> {
   private contextMiddleware?: (request: Request, parsedBody?: unknown) => Promise<RequestContext>;
+  private readonly errorChannel: boolean;
+
+  constructor(options: MastraServerOptions) {
+    const { errorChannel, ...base } = options;
+    super(base);
+    this.errorChannel = errorChannel ?? true;
+  }
 
   /**
    * Builds the per-request Mastra context. Effect has no `derive`, so routes call this directly.
@@ -578,12 +647,16 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     return forwardMcpResponse(await toFetchResponse(res), res);
   }
 
-  /** Never rejects — the caller runs it through `Effect.promise`, whose error channel is `never`. */
+  /**
+   * Never rejects — the caller runs it through `Effect.promise`. A route that threw is still answered
+   * with a response; what it threw is kept in `routeErrors` for `toEffectOutcome`.
+   */
   private async handleRoute(
     route: ServerRoute,
     prefix: string,
     request: Request,
     pathParams: Record<string, string>,
+    span: Tracer.AnySpan | undefined,
   ): Promise<Response> {
     // Outside the try, so a refreshed session reaches the client even when the route then fails.
     let refreshHeaders: Record<string, string> = {};
@@ -605,6 +678,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       };
 
       const requestContext = await this.createContextMiddleware()(request, parsed.body);
+      if (span) requestContext.set(REQUEST_SPAN_KEY, () => span);
       const url = new URL(request.url);
 
       const authError = await this.checkRouteAuth(route, {
@@ -670,7 +744,9 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       const response = await this.sendResponse(route, { ...ctx, body: params.body, requestContext }, result, prefix);
       return withHeaders(response, refreshHeaders);
     } catch (error) {
-      return withHeaders(this.toErrorResponse(error, route), refreshHeaders);
+      const response = withHeaders(this.toErrorResponse(error, route), refreshHeaders);
+      routeErrors.set(response, error);
+      return response;
     }
   }
 
@@ -811,42 +887,46 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     // rc.117's vendored FindMyWay binds the correct param name per route even when two routes
     // differ only in their param name at the same segment, so paths register verbatim — no
     // positional rewrite is needed here (see src/router-collision.test.ts).
-    const handler = (serverRequest: HttpServerRequest.HttpServerRequest) =>
-      Effect.flatMap(Effect.zip(HttpRouter.params, abortOnDisconnect), ([pathParams, signal]) =>
-        // The error channel stays `never`: a request that cannot be materialized is a defect, not a
-        // recoverable route error, and `never` is what makes `add` runnable below.
-        Effect.flatMap(toReadableWebRequest(serverRequest, signal), webRequest =>
-          Effect.map(
-            Effect.promise(() => this.handleRoute(route, prefix, webRequest, pathParams as Record<string, string>)),
-            response => this.toEffectResponse(response),
-          ),
-        ),
-      );
+    const handler = this.toEffectHandler((request, pathParams, span) =>
+      this.handleRoute(route, prefix, request, pathParams, span),
+    );
 
-    await Effect.runPromise(app.add(effectMethod(route.method, route.path), fullPath as `/${string}`, handler));
+    await Effect.runPromise(addRoute(app, effectMethod(route.method, route.path), fullPath as `/${string}`, handler));
   }
 
   async registerCustomApiRoutes(): Promise<void> {
     const routes = await this.registerSchemaApiRoutes();
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
+    const handler = this.toEffectHandler((request, _pathParams, span) => this.handleCustomRoute(request, span));
     for (const route of routes) {
-      const handler = (serverRequest: HttpServerRequest.HttpServerRequest) =>
-        Effect.flatMap(abortOnDisconnect, signal =>
-          Effect.flatMap(toReadableWebRequest(serverRequest, signal), webRequest =>
-            Effect.map(Effect.promise(() => this.handleCustomRoute(webRequest)), response =>
-              this.toEffectResponse(response),
-            ),
-          ),
-        );
-
-      await Effect.runPromise(
-        this.app.add(effectMethod(route.method, route.path), route.path as `/${string}`, handler),
-      );
+      await Effect.runPromise(addRoute(this.app, effectMethod(route.method, route.path), route.path as `/${string}`, handler));
     }
   }
 
-  private async handleCustomRoute(request: Request): Promise<Response> {
+  /**
+   * An Effect route handler around one of the adapter's Web entry points. The entry point gets the
+   * request with a body it can read and a signal that aborts if the client leaves, plus the path
+   * parameters and the request's span; what it answers becomes the Effect result.
+   */
+  private toEffectHandler(
+    answer: (request: Request, pathParams: Record<string, string>, span: Tracer.AnySpan | undefined) => Promise<Response>,
+  ) {
+    return (serverRequest: HttpServerRequest.HttpServerRequest) =>
+      Effect.flatMap(
+        Effect.all([HttpRouter.params, abortOnDisconnect, Effect.option(Effect.currentParentSpan)]),
+        ([pathParams, signal, span]) =>
+          // A request that cannot be materialized is a defect, not a route error.
+          Effect.flatMap(toReadableWebRequest(serverRequest, signal), request =>
+            Effect.flatMap(
+              Effect.promise(() => answer(request, pathParams as Record<string, string>, Option.getOrUndefined(span))),
+              response => this.toEffectOutcome(request, response),
+            ),
+          ),
+      );
+  }
+
+  private async handleCustomRoute(request: Request, span: Tracer.AnySpan | undefined): Promise<Response> {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
@@ -859,6 +939,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       const body = await readBodyFields(request);
 
       const requestContext = await this.createContextMiddleware()(request, body.json);
+      if (span) requestContext.set(REQUEST_SPAN_KEY, () => span);
 
       const matchedRoute = findMatchingCustomRoute(
         path,
@@ -924,8 +1005,30 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
 
       return response ?? json({ error: 'Not Found' }, 404);
     } catch (error) {
-      return this.toErrorResponse(error);
+      const response = this.toErrorResponse(error);
+      routeErrors.set(response, error);
+      return response;
     }
+  }
+
+  /**
+   * The Effect result of a route: its response, or — for a server error (5xx), when the error
+   * channel is on — a `MastraRouteError` that answers with that same response.
+   *
+   * Decided by the status, not by whether the adapter caught something: not every server error
+   * passes through its `catch`. A custom route's handler that throws is answered by Mastra's own
+   * sub-app, and an MCP transport that fails to start writes its 500 itself.
+   */
+  private toEffectOutcome(
+    request: Request,
+    response: Response,
+  ): Effect.Effect<HttpServerResponse.HttpServerResponse, MastraRouteError> {
+    const converted = this.toEffectResponse(response);
+    if (!this.errorChannel || response.status < 500) return Effect.succeed(converted);
+    const cause = routeErrors.has(response)
+      ? routeErrors.get(response)
+      : new Error(`Mastra answered ${request.method} ${new URL(request.url).pathname} with ${response.status}`);
+    return Effect.fail(new MastraRouteError({ status: response.status, cause, response: converted }));
   }
 
   /**
@@ -1212,6 +1315,64 @@ export const createRouter = (config?: Partial<FindMyWay.RouterConfig>): EffectRo
   );
 
 /**
+ * Registers a route whose handler may fail with `MastraRouteError`.
+ *
+ * `HttpRouter.add` records a handler's error type as a requirement, so middleware can promise to
+ * handle it. Nothing needs to: unhandled, the error answers with its own response (it is
+ * `Respondable`). So the requirement is dropped here, which keeps registration runnable on its own.
+ */
+const addRoute = (
+  app: EffectRouter,
+  method: Parameters<EffectRouter['add']>[0],
+  path: `/${string}`,
+  handler: (
+    request: HttpServerRequest.HttpServerRequest,
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, MastraRouteError, Scope.Scope | HttpRouter.RouteContext>,
+): Effect.Effect<void> => app.add(method, path, handler) as Effect.Effect<void>;
+
+/**
+ * The Effect span of the HTTP request a Mastra tool or workflow step is running for, when the app
+ * has a tracer installed. `undefined` otherwise, and for a workflow resumed by a later request.
+ */
+export function requestSpan(requestContext: RequestContext | undefined): Tracer.AnySpan | undefined {
+  const getSpan = requestContext?.get(REQUEST_SPAN_KEY);
+  return typeof getSpan === 'function' ? (getSpan as () => Tracer.AnySpan)() : undefined;
+}
+
+/**
+ * Runs an Effect from inside a Mastra tool or workflow step.
+ *
+ * Mastra runs tools and steps as plain promises, outside the Effect request that triggered them.
+ * This gives the Effect the services `runtime` provides, makes the HTTP request's span its parent,
+ * and interrupts it when Mastra's abort signal fires. Pass the context Mastra hands the tool or
+ * step — it carries both the request context and that signal:
+ *
+ * ```ts
+ * execute: (input, context) => runInRequest(runtime, Users.find(input.id), context)
+ * ```
+ *
+ * Two things follow from running through `runtime` rather than the request:
+ *
+ * - The signal is whatever Mastra hands over. For a tool an agent calls, it aborts when the client
+ *   leaves. A workflow step's is the run's own: it aborts when the run is cancelled, not when the
+ *   request that started it is abandoned.
+ * - The spans the Effect creates are made by `runtime`'s tracer. Give the runtime the app's tracer
+ *   as well, or they have the right parent but are never exported.
+ */
+export function runInRequest<A, E, R>(
+  runtime: ManagedRuntime.ManagedRuntime<R, never>,
+  effect: Effect.Effect<A, E, R>,
+  context: { readonly requestContext?: RequestContext; readonly abortSignal?: AbortSignal } = {},
+): Promise<A> {
+  const span = requestSpan(context.requestContext);
+  // The parent is set explicitly. With @effect/opentelemetry and a context manager, an Effect span
+  // started here should join the active OpenTelemetry span by itself, but it starts a new trace
+  // instead: https://github.com/Effect-TS/effect/issues/8489. Once fixed, this still matters for apps
+  // without a context manager, so it stays.
+  return runtime.runPromise(span ? Effect.withParentSpan(effect, span) : effect, { signal: context.abortSignal });
+}
+
+/**
  * Turns a populated router into a fetch-compatible handler plus its teardown.
  *
  * Effect logs every request it answers; pass `{ disableLogger: true }` to stop that. `dispose`
@@ -1220,8 +1381,6 @@ export const createRouter = (config?: Partial<FindMyWay.RouterConfig>): EffectRo
  */
 export const toWebHandler = (router: EffectRouter, options?: { readonly disableLogger?: boolean }) =>
   HttpRouter.toWebHandler(Layer.succeed(HttpRouter.HttpRouter)(router), options);
-
-type MastraServerOptions = ConstructorParameters<typeof MastraServer>[0];
 
 /** Everything `MastraServer` takes except the router, which `createMastraServer` builds for you. */
 export type CreateMastraServerOptions = Omit<MastraServerOptions, 'app'>;

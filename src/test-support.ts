@@ -32,12 +32,16 @@ export const freePort = () =>
     });
   });
 
-/** Serves the router on a real Node HTTP server, the way an Effect app normally runs. */
-export const onNodeServer = async (router: EffectRouter) => {
+/**
+ * Serves the router on a real Node HTTP server, the way an Effect app normally runs. `services` is
+ * provided to the server, for a test that needs a tracer or other services in place.
+ */
+export const onNodeServer = async (router: EffectRouter, services: Layer.Layer<never> = Layer.empty) => {
   const port = await freePort();
   const runtime = ManagedRuntime.make(
     HttpServer.serve()(router.asHttpEffect()).pipe(
       Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
+      Layer.provide(services),
     ),
   );
   await runtime.runPromise(Effect.void);
