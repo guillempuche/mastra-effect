@@ -852,10 +852,11 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       const path = url.pathname;
       const method = request.method;
 
-      // Parsed from a copy, only to read fields from. The route itself gets the original body: custom
-      // routes are often webhooks that verify a signature over the exact bytes sent, and parsing and
-      // re-serialising changes them — whitespace, duplicate keys, large integers, binary data.
-      const body = await readBodyFields(request.clone());
+      // `readBodyFields` parses a copy, only to read fields from. The route itself gets the original
+      // body: custom routes are often webhooks that verify a signature over the exact bytes sent,
+      // and parsing and re-serialising changes them — whitespace, duplicate keys, large integers,
+      // binary data.
+      const body = await readBodyFields(request);
 
       const requestContext = await this.createContextMiddleware()(request, body.json);
 
@@ -1174,17 +1175,20 @@ const effectKeptBody = (serverRequest: HttpServerRequest.HttpServerRequest): boo
  * members of a JSON object, or the entries of a form. `json` is the parsed JSON, for the request
  * context. Anything unreadable contributes nothing — the route still receives the body and reports
  * the problem itself.
+ *
+ * Reads a copy, leaving `request`'s own body for the route, and copies only a body it will read: an
+ * unread copy of a large upload would hold every byte of it until the request is gone.
  */
 async function readBodyFields(request: Request): Promise<{ json?: unknown; fields: Record<string, unknown> }> {
   const contentType = request.headers.get('content-type') ?? '';
   try {
     if (contentType.includes('application/json')) {
-      const parsed: unknown = await request.json();
+      const parsed: unknown = await request.clone().json();
       const isObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
       return { json: parsed, fields: isObject ? (parsed as Record<string, unknown>) : {} };
     }
     if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-      return { fields: Object.fromEntries(await request.formData()) };
+      return { fields: Object.fromEntries(await request.clone().formData()) };
     }
   } catch {
     // Not what the content type claims.
