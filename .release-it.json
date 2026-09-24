@@ -1,8 +1,8 @@
 {
-  "$schema": "https://unpkg.com/release-it@20/schema/release-it.json",
+  "$schema": "https://unpkg.com/release-it@21/schema/release-it.json",
   "git": {
     "commit": true,
-    "commitMessage": "cicd(release): v${version}",
+    "commitMessage": "chore(release): v${version}",
     "push": true,
     "pushArgs": ["--follow-tags"],
     "requireBranch": "main",

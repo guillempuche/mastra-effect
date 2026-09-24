@@ -1,8 +1,9 @@
 name: Release
 
-# Only from a tag on the default branch, or by hand. Never on `pull_request` —
-# this workflow is the one place with publish rights, so untrusted code must not
-# be able to reach it.
+# From a `v*` tag, which `pnpm release` creates on main, or by hand. Never on `pull_request` — this
+# workflow is the one place with publish rights, so untrusted code must not be able to reach it. The
+# first step of the publish job refuses anything that is not a version tag on main, whichever way
+# the workflow was started.
 on:
   push:
     tags: ['v*']
@@ -11,55 +12,99 @@ on:
 permissions:
   contents: read
 
+# One release at a time, and never cancelled halfway through a publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  # The whole CI workflow, not a subset of it: lint, both Node versions, every example, the tarball
+  # assertions and the vendored-Effect check all have to pass on the exact commit being published.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: Publish to npm
+    needs: ci
     runs-on: ubuntu-latest
 
-    # A GitHub environment with a required reviewer puts a human between a pushed
-    # tag and a published version, and npm's trusted publisher can be scoped to
-    # this environment specifically.
+    # A GitHub environment with a required reviewer puts a human between a pushed tag and a published
+    # version, and npm's trusted publisher can be scoped to this environment specifically. It has to
+    # be created in the repository settings; see the release skill.
     environment: release
 
     permissions:
       contents: read
-      # The whole point: mint a short-lived OIDC token so npm can verify this
-      # build's identity. There is no NPM_TOKEN in this repository, so there is
-      # no long-lived credential to steal — and npm no longer offers classic
-      # tokens anyway.
+      # The whole point: mint a short-lived OIDC token so npm can verify this build's identity. There
+      # is no NPM_TOKEN in this repository, so there is no long-lived credential to steal.
       id-token: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history, to prove the tag's commit is on main.
+          fetch-depth: 0
+          # Nothing later in this job pushes, so it needs no git credential left on disk.
+          persist-credentials: false
+
+      - name: Refuse anything but a version tag on main
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF" != "refs/tags/v$version" ]; then
+            echo "::error::Publishing needs the tag v$version (package.json's version); this run is on $GITHUB_REF."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::v$version points at a commit that is not on main."
+            exit 1
+          fi
+
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
-      # Deliberately no `cache: pnpm` here. A cache entry written by an earlier
-      # unprivileged run is attacker-influenced input, and this is the one job
-      # where that matters. A cold install costs a minute.
+      # Node 24 because npm's trusted publishing needs npm 11.5.1 or later, which Node 22 never ships
+      # (22.x bundles npm 10.9). CI above still proves the package on the 22.13 floor.
+      #
+      # Deliberately no `cache: pnpm` here. A cache entry written by an earlier unprivileged run is
+      # attacker-influenced input, and this is the one job where that matters. A cold install costs a
+      # minute.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22.13'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check npm can publish with trusted publishing
+        run: |
+          set -euo pipefail
+          npm_version=$(npm --version)
+          echo "npm $npm_version"
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$npm_version" \
+            || { echo "::error::npm $npm_version cannot do trusted publishing; it needs 11.5.1 or later."; exit 1; }
 
-      - run: pnpm typecheck
-      - run: pnpm test
+      # Only the package itself: the examples play no part in what is published.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - run: pnpm build
 
+      # Into a directory of its own, so the publish step can insist on exactly one tarball rather
+      # than taking the first one it happens to find.
       - name: Pack
-        run: pnpm pack --pack-destination /tmp
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/package"
 
-      # pnpm's own publish has delegated the OIDC exchange to the npm CLI
-      # historically, and that path has been reported broken on pnpm 11. Packing
-      # with pnpm and publishing the tarball with npm keeps the trusted-publishing
-      # flow on the tool that owns it.
+      # pnpm's own publish has delegated the OIDC exchange to the npm CLI historically, and that path
+      # has been reported broken. Packing with pnpm and publishing the tarball with npm keeps the
+      # trusted-publishing flow on the tool that owns it.
       #
-      # --provenance is implied by trusted publishing; consumers can verify the
-      # result with `npm audit signatures`.
+      # --provenance is implied by trusted publishing; consumers can verify the result with
+      # `npm audit signatures`.
       - name: Publish
         run: |
           set -euo pipefail
-          tarball=$(find /tmp -maxdepth 1 -name '*.tgz' | head -1)
-          echo "publishing $tarball"
-          npm publish "$tarball" --access public
+          shopt -s nullglob
+          tarballs=("$RUNNER_TEMP"/package/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one tarball, found ${#tarballs[@]}."
+            exit 1
+          fi
+          echo "publishing ${tarballs[0]}"
+          npm publish "${tarballs[0]}" --access public

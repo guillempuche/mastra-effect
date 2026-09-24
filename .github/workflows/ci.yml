@@ -8,6 +8,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The release workflow runs all of this on the commit it is about to publish.
+  workflow_call:
 
 # Read-only by default. Individual jobs escalate only if they must; nothing here
 # needs to write, so nothing here can.
@@ -44,7 +46,7 @@ jobs:
 
       # --frozen-lockfile turns an unreviewed lockfile edit into a failed build
       # rather than a silent resolution change. --filter . keeps the install to the root
-      # package: the example is a workspace member now, and this job never touches it.
+      # package: the examples are workspace members, and this job never touches them.
       - run: pnpm install --frozen-lockfile --filter .
 
       - run: pnpm typecheck
@@ -69,7 +71,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --filter .
 
-      # The same checks lefthook runs before a push. Repeated here because a hook
+      # The same checks lefthook runs on commit and push. Repeated here because a hook
       # is a convenience for the person who installed it, not an enforcement
       # mechanism — `--no-verify` skips every one of them.
       - name: Scan for leaked credentials
@@ -78,15 +80,15 @@ jobs:
       - name: Check dependency versions agree across packages
         run: pnpm lint-deps
 
-  example:
-    name: Example (node ${{ matrix.node }})
+  examples:
+    name: Examples (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Same two versions as the library. This is the only place Better Auth, the Effect
-        # server and the MCP paths run together, so testing it on one version would leave the
-        # end-to-end proof narrower than the unit coverage underneath it.
+        # Same two versions as the library. The examples are what people copy, and the only place
+        # the adapter runs alongside Better Auth and OpenTelemetry, so testing them on one version
+        # would leave the end-to-end proof narrower than the unit coverage underneath it.
         node: ['22.13', '24']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,19 +98,16 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
 
-      # One install covers the example too, now that it is a workspace member. Running
-      # `pnpm install` inside its own directory instead would resolve to this same workspace,
-      # report "Already up to date" and install nothing at all.
+      # One install at the root covers every example, since each is a workspace member.
       - run: pnpm install --frozen-lockfile
 
-      # The example consumes the library's built output, so it has to exist first.
-      - run: pnpm build
-
-      - name: Check the example
-        working-directory: examples/mastra-in-an-effect-server
+      # Every directory under examples/, so a new example is checked without editing this file.
+      # Each builds the library first through its own pre-script, one example at a time
+      # (workspaceConcurrency in pnpm-workspace.yaml) so the builds cannot collide.
+      - name: Check every example
         run: |
-          pnpm typecheck
-          pnpm test
+          pnpm -r --filter './examples/*' typecheck
+          pnpm -r --filter './examples/*' test
 
   package:
     name: Published artifact
@@ -124,7 +123,15 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter .
       - run: pnpm build
 
-      # `files: ["dist"]` is what keeps the 53 MB vendored Effect subtree out of
+      # effect ships ESM only, so the CommonJS build reaches it through Node's require(esm), which
+      # Node enables from 22.12. This job runs on the 22.13 floor, so load the build both ways here
+      # rather than assume a CommonJS consumer can.
+      - name: Load the build as a consumer would, both ways
+        run: |
+          node -e "const m = require('./dist/index.cjs'); if (typeof m.createMastraServer !== 'function') process.exit(1)"
+          node --input-type=module -e "const m = await import('./dist/index.js'); if (typeof m.createMastraServer !== 'function') process.exit(1)"
+
+      # `files` is what keeps the 53 MB vendored Effect subtree out of
       # the tarball. That is one edit away from being wrong, and the failure is
       # silent, so assert it rather than trust it.
       - name: Assert the tarball holds only what it should
@@ -183,19 +190,31 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --filter .
 
-      # docs/repos/effect is a second source of truth: the code compiles against
-      # the npm package while a reader consults the subtree. src/effect-api-gate.ts
-      # catches API drift but not version drift, and a dependency bot can move the
-      # npm side without touching the subtree, which no bot can update.
+      # Why this matters is in the script; lefthook runs the same one before a push.
       - name: Compare the subtree tag against the installed version
+        run: pnpm lint-vendor
+
+  mastra-floor:
+    name: Oldest supported Mastra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # The lockfile resolves the newest Mastra, so every other job tests that. This one swaps in the
+      # oldest `@mastra/core` and `@mastra/server` the package declares — read from package.json, so
+      # it moves with the range — and runs the whole suite there, so the floor is a tested claim
+      # rather than a hopeful one. The lockfile change lives only in this job's checkout.
+      - name: Pin Mastra to the declared floor
         run: |
           set -euo pipefail
-          vendored=$(node -p "require('./docs/repos/effect/packages/effect/package.json').version")
-          installed=$(node -p "require('effect/package.json').version")
-          echo "vendored:  $vendored"
-          echo "installed: $installed"
-          if [ "$vendored" != "$installed" ]; then
-            echo "::error::docs/repos/effect is at $vendored but effect resolves to $installed."
-            echo "Run: git subtree pull --prefix docs/repos/effect https://github.com/Effect-TS/effect.git effect@$installed --squash"
-            exit 1
-          fi
+          floor=$(node -p "require('./package.json').dependencies['@mastra/server'].replace(/^\\^/, '')")
+          echo "testing against @mastra/core and @mastra/server $floor"
+          printf "\noverrides:\n  '@mastra/core': %s\n  '@mastra/server': %s\n" "$floor" "$floor" >> pnpm-workspace.yaml
+          pnpm install --no-frozen-lockfile --filter .
+
+      - run: pnpm test
