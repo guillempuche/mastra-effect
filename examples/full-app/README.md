@@ -71,6 +71,48 @@ addresses collapse to `:id`. Tests cover each case, including one asserting that
 of any real Mastra route is mistaken for an id, which would silently merge unrelated routes into one
 bucket.
 
+### Mastra's spans, in the same trace
+
+With telemetry on, Mastra traces its own work through its OpenTelemetry bridge
+(`mastraObservability` in [`src/observability.ts`](src/observability.ts)): the agent run, each step,
+model calls with token counts, and tool calls. They land in the same trace as the HTTP request,
+under its span, so one trace shows a request from the route down to the model call.
+[`src/tracing.test.ts`](src/tracing.test.ts) checks that parentage.
+
+Two things make it work, and both are easy to miss:
+
+- **The tracer provider is registered process-wide.** The bridge reads only the registered provider,
+  and Effect's `NodeSdk.layer` never registers the one it builds. Without the registration, the bridge
+  exports none of Mastra's spans and nothing fails
+  ([mastra-ai/mastra#24950](https://github.com/mastra-ai/mastra/issues/24950)). Registering also
+  installs the context manager that lets Mastra's spans nest under the request. The registration is
+  undone when the server stops. OpenTelemetry refuses to register twice, so without that, a server
+  started again in the same process would export none of Mastra's spans.
+- **Mastra samples everything** and leaves sampling to OpenTelemetry, so a sampled request never has
+  holes where its agent spans should be. Per-chunk spans of streamed answers are left out.
+
+Your own Effect code inside a tool or workflow step, run with `runInRequest`, joins the same trace
+when its runtime has `runtimeTracing`:
+
+```ts
+const runtime = ManagedRuntime.make(Layer.mergeAll(AppServicesLive, runtimeTracing('my-app')));
+```
+
+The runtime's tracer, not the server's, makes that code's spans. `runtimeTracing` sends them
+through the provider registered above. Without it, they are made with Effect's default tracer and
+never exported. The tests check this too.
+
+**Prompts, answers and tool arguments are exported as they are.** Mastra redacts keys that look
+sensitive, such as passwords and tokens, not the text itself. Mask them before they leave the
+process if they can carry personal data — with a Mastra span output processor, or per request with
+`tracingOptions.hideInput` / `hideOutput`.
+
+The same bridge also serves Mastra's other exporters. For LLM-specific tools such as Langfuse, add
+Mastra's exporter for it (`@mastra/langfuse`) to the same observability config.
+
+The bridge brings OpenTelemetry's gRPC exporters with it, through `@mastra/otel-exporter`, even though
+nothing here uses gRPC. That weight stays in this example; the adapter itself depends on none of it.
+
 ### Local
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` is the on/off switch — unset means no export at all, and the process

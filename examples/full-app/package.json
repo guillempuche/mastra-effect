@@ -20,6 +20,8 @@
     "@mastra/auth-better-auth": "^1.1.5",
     "@mastra/core": "^1.68.0",
     "@mastra/mcp": "^2.0.0",
+    "@mastra/observability": "^1.18.0",
+    "@mastra/otel-bridge": "^1.5.10",
     "@mastra/server": "^1.68.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.222.0",

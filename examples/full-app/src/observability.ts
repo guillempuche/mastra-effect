@@ -3,10 +3,17 @@ import { randomUUID } from 'node:crypto';
 // Imported by subpath, not from the barrel: the barrel re-exports WebSdk, which drags
 // @opentelemetry/sdk-trace-web into a Node-only process.
 import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
+import * as OtelTracer from '@effect/opentelemetry/OtelTracer';
+import * as Resource from '@effect/opentelemetry/Resource';
+import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
+import { Observability } from '@mastra/observability';
+import { OtelBridge } from '@mastra/otel-bridge';
+import { context, propagation, trace } from '@opentelemetry/api';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchLogRecordProcessor, type LogRecordExporter } from '@opentelemetry/sdk-logs';
+import { BatchSpanProcessor, type SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import type { EffectRouter } from '@guillem_puche/mastra-effect';
 import { Effect, Exit, Layer } from 'effect';
 import { HttpServerError, HttpServerRequest, type HttpServerResponse } from 'effect/unstable/http';
@@ -161,27 +168,104 @@ export function recordRequests(router: EffectRouter): void {
 export interface TelemetryOptions {
   readonly serviceName: string;
   readonly serviceVersion?: string;
+  /**
+   * Where spans and log records go: OTLP over HTTP, configured from `OTEL_EXPORTER_OTLP_*`, unless
+   * given here. Tests pass in-memory exporters.
+   */
+  readonly exporters?: { readonly spans: SpanExporter; readonly logs: LogRecordExporter };
 }
 
 /**
- * OTLP export, off unless an endpoint is set.
+ * Whether telemetry is on. `OTEL_EXPORTER_OTLP_ENDPOINT` is the switch, so local and cloud differ by
+ * environment only — point it at otel-tui on `http://localhost:4318` in development, or at a vendor
+ * with `OTEL_EXPORTER_OTLP_HEADERS` carrying the key. The exporters read both themselves.
+ */
+export const telemetryEnabled = (): boolean => Boolean(process.env.OTEL_EXPORTER_OTLP_ENDPOINT);
+
+/**
+ * OTLP export of traces and logs, off unless enabled or given `exporters`, as tests do.
  *
- * `OTEL_EXPORTER_OTLP_ENDPOINT` is the on/off switch, so local and cloud differ by environment
- * only — point it at otel-tui on `http://localhost:4318` in development, or at a vendor with
- * `OTEL_EXPORTER_OTLP_HEADERS` carrying the key. The exporter reads both itself.
+ * Returns an empty layer when off rather than failing: telemetry is not needed to serve a request,
+ * and refusing to boot over a monitoring setting turns "cannot watch" into "cannot run".
  *
- * Returns an empty layer when unset rather than failing: telemetry is not needed to serve a
- * request, and refusing to boot over a monitoring setting turns "cannot watch" into "cannot run".
+ * The tracer provider is registered process-wide. Effect's `NodeSdk.layer` builds one without
+ * registering it, and Mastra's OpenTelemetry bridge only reads the registered one — without this,
+ * the bridge exports none of Mastra's spans, with no error to say so
+ * (https://github.com/mastra-ai/mastra/issues/24950). Registering also installs the context manager
+ * that lets Mastra's spans nest under the request's span.
+ *
+ * The registration is undone when the layer is released. Otherwise the process keeps the shut-down
+ * provider as its global one, and OpenTelemetry refuses a second registration, so a server started
+ * again in the same process — a restart in development, a second test — would export none of
+ * Mastra's spans, with nothing to say so.
  */
 export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
-  const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  if (!endpoint) return Layer.empty;
+  if (!options.exporters && !telemetryEnabled()) return Layer.empty;
 
-  // Logs as well as traces: the wide record above is a log line, and without a log processor it
-  // would reach the backend only folded into a span as an event.
-  return NodeSdk.layer(() => ({
+  const registerGlobally = Layer.effectDiscard(
+    Effect.flatMap(Effect.service(OtelTracer.OtelTracerProvider), provider =>
+      Effect.acquireRelease(
+        Effect.sync(() => (provider as NodeTracerProvider).register()),
+        () =>
+          Effect.sync(() => {
+            trace.disable();
+            context.disable();
+            propagation.disable();
+          }),
+      ),
+    ),
+  );
+
+  const tracing = Layer.mergeAll(OtelTracer.layer, registerGlobally).pipe(
+    Layer.provide(NodeSdk.layerTracerProvider(new BatchSpanProcessor(options.exporters?.spans ?? new OTLPTraceExporter()))),
+  );
+
+  // The wide record above is a log line: without a log processor it would reach the backend only
+  // folded into a span as an event. No spanProcessor here, so this installs no second tracer.
+  const logsAndResource = NodeSdk.layer(() => ({
     resource: { serviceName: options.serviceName, serviceVersion: options.serviceVersion },
-    spanProcessor: new BatchSpanProcessor(new OTLPTraceExporter()),
-    logRecordProcessor: new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
+    logRecordProcessor: new BatchLogRecordProcessor({ exporter: options.exporters?.logs ?? new OTLPLogExporter() }),
   }));
+
+  return tracing.pipe(Layer.provideMerge(logsAndResource));
+}
+
+/**
+ * The tracer for a runtime that `runInRequest` runs Effect code through, from a tool or a workflow
+ * step.
+ *
+ * That code's spans are made by the runtime's tracer, not the server's. This one sends them through
+ * the provider `telemetryLayer` registers, so they are exported in the request's trace, under its
+ * span. Without it the runtime makes them with Effect's default tracer, which exports nothing. With
+ * telemetry off, the registered provider is OpenTelemetry's no-op one, and so is this.
+ *
+ * ```ts
+ * const runtime = ManagedRuntime.make(Layer.mergeAll(AppServicesLive, runtimeTracing('my-app')));
+ * ```
+ */
+export const runtimeTracing = (serviceName: string): Layer.Layer<OtelTracer.OtelTracer> =>
+  OtelTracer.layerGlobal.pipe(Layer.provide(Resource.layer({ serviceName })));
+
+/**
+ * Mastra's own tracing — agent runs, model calls with token counts, tool calls, workflow steps —
+ * sent through the tracer provider `telemetryLayer` registers, so every one of those spans lands in
+ * the same trace as the HTTP request, under its span.
+ *
+ * Only for when telemetry is on: the bridge does nothing without a registered provider except warn
+ * on every span. Mastra samples everything here and leaves the decision to the OpenTelemetry
+ * sampler, so a sampled request is never missing its agent spans. Streamed chunks are left out: one
+ * span per token-sized chunk multiplies the volume without telling you anything the model span does
+ * not.
+ */
+export function mastraObservability(serviceName: string): Observability {
+  return new Observability({
+    configs: {
+      otel: {
+        serviceName,
+        bridge: new OtelBridge(),
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      },
+    },
+  });
 }

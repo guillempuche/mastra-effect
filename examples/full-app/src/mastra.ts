@@ -7,6 +7,7 @@ import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
 import type { Auth } from './auth.ts';
+import { mastraObservability, telemetryEnabled } from './observability.ts';
 
 const echo = createTool({
   id: 'echo',
@@ -40,6 +41,8 @@ const assistant = new Agent({
 
 export function createMastra(auth: Auth): Mastra {
   return new Mastra({
+    // Agent, model and tool spans, in the same trace as the HTTP request — when telemetry is on.
+    ...(telemetryEnabled() ? { observability: mastraObservability('example-full-app') } : {}),
     storage: new InMemoryStore(),
     agents: { assistant },
     mcpServers: { example: mcpServer },
