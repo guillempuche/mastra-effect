@@ -25,8 +25,24 @@ pre-commit:
       run: pnpm lint-deps
 
 pre-push:
-  parallel: true
+  # One at a time. The test and typecheck-examples jobs rebuild the library for each example, and
+  # the build job rebuilds it too; each build briefly deletes dist/, so in parallel one job can
+  # find it missing while another rebuilds it.
+  parallel: false
   jobs:
+    - name: typecheck
+      # Pre-commit type-checks only when a .ts file is staged, so a change to tsconfig.json,
+      # package.json or the lockfile — which can break types just as well — reaches here unchecked.
+      run: pnpm typecheck
+
+    - name: lint
+      # The whole tree, not only the staged files pre-commit sees, as CI lints it.
+      run: pnpm lint
+
+    - name: vendored-effect
+      # The one CI check with no other local equivalent; the script says why it matters.
+      run: pnpm lint-vendor
+
     - name: secrets
       # This repository is public and publishes to npm, so a leaked credential is
       # leaked to everyone. GitHub's push protection catches known token formats
@@ -35,10 +51,16 @@ pre-push:
       run: pnpm lint-secrets
 
     - name: test
-      # Both packages. --include-workspace-root is required: pnpm excludes the root project
-      # from -r by default, so `pnpm -r test` alone would run the example's 30 tests and
-      # silently skip the library's 2647 — the opposite of what this hook is for.
+      # The library and every example. --include-workspace-root is required: pnpm excludes the
+      # root project from -r by default, so `pnpm -r test` alone would run the examples' tests and
+      # silently skip the library's — the opposite of what this hook is for.
       run: pnpm -r --include-workspace-root test
+
+    - name: typecheck-examples
+      # The pre-commit typecheck covers the library only, and vitest does not type-check, so an
+      # example's files — its tests included — are checked nowhere else before CI. A type error in
+      # an example's test once passed every hook this way and failed CI.
+      run: pnpm -r --filter './examples/*' typecheck
 
     - name: build
       # Runs publint and are-the-types-wrong, so a broken exports map or a type
