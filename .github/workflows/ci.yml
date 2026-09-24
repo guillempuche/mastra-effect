@@ -209,12 +209,17 @@ jobs:
       # oldest `@mastra/core` and `@mastra/server` the package declares — read from package.json, so
       # it moves with the range — and runs the whole suite there, so the floor is a tested claim
       # rather than a hopeful one. The lockfile change lives only in this job's checkout.
+      #
+      # Each floor comes from its own declaration: `@mastra/server` is a dependency (`^x`), and
+      # `@mastra/core` a peer (`>=x <y`). A range written in some other shape fails here rather than
+      # testing a version nobody declared.
       - name: Pin Mastra to the declared floor
         run: |
           set -euo pipefail
-          floor=$(node -p "require('./package.json').dependencies['@mastra/server'].replace(/^\\^/, '')")
-          echo "testing against @mastra/core and @mastra/server $floor"
-          printf "\noverrides:\n  '@mastra/core': %s\n  '@mastra/server': %s\n" "$floor" "$floor" >> pnpm-workspace.yaml
+          server_floor=$(node -p "require('./package.json').dependencies['@mastra/server'].match(/^\\^(\\S+)/)[1]")
+          core_floor=$(node -p "require('./package.json').peerDependencies['@mastra/core'].match(/^>=\\s*(\\S+)/)[1]")
+          echo "testing against @mastra/core $core_floor and @mastra/server $server_floor"
+          printf "\noverrides:\n  '@mastra/core': %s\n  '@mastra/server': %s\n" "$core_floor" "$server_floor" >> pnpm-workspace.yaml
           pnpm install --no-frozen-lockfile --filter .
 
       - run: pnpm test
