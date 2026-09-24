@@ -15,11 +15,16 @@ Two halves, on purpose:
   `v<package.json version>` on a commit in `main`.
 
 ```bash
-pnpm release:dry   # always first
-pnpm release       # requires a clean tree on main, with an upstream
+GITHUB_TOKEN=$(gh auth token) pnpm release:dry   # always first
+GITHUB_TOKEN=$(gh auth token) pnpm release       # requires a clean tree on main, with an upstream
 ```
 
+`GITHUB_TOKEN` is required: `release-it` creates the GitHub release with it, and fails without one.
 `before:init` runs `pnpm typecheck && pnpm test && pnpm build`, so a release cannot be cut red.
+
+Pushing the tag does not publish yet. The Release run under **Actions** runs CI, then waits at the
+`release` environment until its reviewer opens **Review deployments** and approves it. Nothing
+reaches npm before that click.
 
 ## Decide these before bumping
 
@@ -76,8 +81,10 @@ settings that only the owner can make. In order:
    `pnpm build && npm publish --access public`. The package is scoped, so without `--access public`
    it would be private.
 2. **On npmjs.com, add a trusted publisher** for the package: GitHub Actions, repository
-   `guillempuche/mastra-effect`, workflow `release.yml`, environment `release`. Then, in the package
-   settings, require two-factor authentication and disallow tokens, so only the workflow can publish.
+   `guillempuche/mastra-effect`, workflow `release.yml`, environment `release`, and tick **Allow npm
+   publish** — without it the publisher may only stage a version, and the workflow's `npm publish`
+   is refused. These fields cannot be edited afterwards. Then, in the package settings, require
+   two-factor authentication and disallow tokens, so only the workflow can publish.
 3. **In the GitHub repository settings, create the `release` environment** with yourself as a
    required reviewer, and limit its deployments to tags matching `v*`. Until it exists, GitHub creates
    it on first use with no protection, and a pushed tag publishes with nobody approving it.
@@ -95,9 +102,15 @@ npm view @guillem_puche/mastra-effect
 npm audit signatures
 ```
 
+A version can take a few minutes to become readable after it is published — the first one
+especially — so an immediate `npm view` may answer 404 for a publish that worked.
+`npm access get status @guillem_puche/mastra-effect` answers sooner.
+
 ## Conventional commits
 
 The changelog is generated from commit types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`,
-`cicd`. `chore` is hidden, which is why release commits are `chore(release)`. A release with nothing
+`cicd`. `chore` is left out of that list, which keeps it out of the changelog and is why release
+commits are `chore(release)`. Listing it with `hidden: true` does not work: the commits still
+appear, in an untitled list. A release with nothing
 but `chore` commits produces an empty changelog section — usually a sign the release is not worth
 cutting.
