@@ -17,8 +17,8 @@ workspaceConcurrency: 1
 
 # Deny every dependency lifecycle script. An install-time script is the primary
 # malware vector in a compromised release, and auditing this tree found that
-# nothing in it but lefthook declares install, preinstall or postinstall — so the
-# allowlist holds that one entry by evidence rather than by optimism.
+# only lefthook and protobufjs declare install, preinstall or postinstall — so the
+# allowlist allows one and names the other as denied, by evidence rather than by optimism.
 #
 # If a future dependency genuinely needs to build, pnpm will say so: add that one
 # package here rather than reaching for dangerouslyAllowAllBuilds.
@@ -28,6 +28,10 @@ allowBuilds:
   # named exception — which is the whole point of an allowlist over a blanket
   # permit. It is a devDependency and never reaches a consumer of this package.
   lefthook: true
+  # Denied, but named so pnpm stops asking. Its postinstall only prints a warning about version
+  # schemes, and nothing here needs it. It arrives with @mastra/otel-bridge, through the gRPC
+  # exporters @mastra/otel-exporter depends on, and only in examples/full-app.
+  protobufjs: false
 
 # Refuse to resolve a version published less than a day ago. A compromised
 # release is typically caught and unpublished within hours, so the delay is the
@@ -56,3 +60,9 @@ minimumReleaseAgeExclude:
 peerDependencyRules:
   allowedVersions:
     '@mastra/server-adapters-test-suite>@mastra/mcp': '2'
+  # @mastra/otel-bridge lists the OpenTelemetry Node SDK and its auto-instrumentations as peers, but
+  # only ever imports @opentelemetry/api and api-logs. full-app registers its own provider, so it
+  # installs neither — they would add dozens of packages that never load.
+  ignoreMissing:
+    - '@opentelemetry/sdk-node'
+    - '@opentelemetry/auto-instrumentations-node'
