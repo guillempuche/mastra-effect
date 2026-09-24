@@ -13,7 +13,7 @@ console.log(`installed: ${installed}`);
 if (vendored !== installed) {
   console.log(`::error::docs/repos/effect is at ${vendored} but effect resolves to ${installed}.`);
   console.log(
-    `Run: git subtree pull --prefix docs/repos/effect https://github.com/Effect-TS/effect.git effect@${installed} --squash`,
+    `Run: scripts/update-vendored-effect.sh ${installed}`,
   );
   process.exit(1);
 }
