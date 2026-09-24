@@ -97,40 +97,40 @@ describe('an MCP client that disconnects', () => {
   });
 });
 
+const authed = (mcpServer: unknown) =>
+  new Mastra({
+    server: { auth: new SimpleAuth({ tokens: { 'token-1': { id: 'user-1' } } }) },
+    mcpServers: { s: mcpServer },
+  } as never);
+const signedIn = { ...HEADERS, authorization: 'Bearer token-1' };
+
+/** Over the 2025 protocol by hand: a 1.x server keeps a session between requests. */
+const callWhoamiV1 = async (origin: string) => {
+  const { session } = await openSession(origin, signedIn);
+  const response = await fetch(`${origin}/api/mcp/s/mcp`, {
+    method: 'POST',
+    headers: { ...signedIn, 'mcp-session-id': session },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'whoami', arguments: {} } }),
+  });
+  return response.text();
+};
+
+/** Through Mastra's own client: a 2.x server only speaks the newer protocol. */
+const callWhoamiV2 = async (origin: string) => {
+  const client = new MCPClient({
+    id: `whoami-${origin}`,
+    servers: { s: { url: new URL(`${origin}/api/mcp/s/mcp`), requestInit: { headers: { authorization: 'Bearer token-1' } } } },
+  });
+  try {
+    const tools = await client.listTools();
+    const whoamiTool = Object.values(tools)[0] as { execute: (input: object, context: object) => Promise<unknown> };
+    return JSON.stringify(await whoamiTool.execute({}, {}));
+  } finally {
+    await client.disconnect();
+  }
+};
+
 describe("an MCP tool's caller", () => {
-  const authed = (server: unknown) =>
-    new Mastra({
-      server: { auth: new SimpleAuth({ tokens: { 'token-1': { id: 'user-1' } } }) },
-      mcpServers: { s: server },
-    } as never);
-  const signedIn = { ...HEADERS, authorization: 'Bearer token-1' };
-
-  /** Over the 2025 protocol by hand: a 1.x server keeps a session between requests. */
-  const callWhoamiV1 = async (origin: string) => {
-    const { session } = await openSession(origin, signedIn);
-    const response = await fetch(`${origin}/api/mcp/s/mcp`, {
-      method: 'POST',
-      headers: { ...signedIn, 'mcp-session-id': session },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'whoami', arguments: {} } }),
-    });
-    return response.text();
-  };
-
-  /** Through Mastra's own client: a 2.x server only speaks the newer protocol. */
-  const callWhoamiV2 = async (origin: string) => {
-    const client = new MCPClient({
-      id: `whoami-${origin}`,
-      servers: { s: { url: new URL(`${origin}/api/mcp/s/mcp`), requestInit: { headers: { authorization: 'Bearer token-1' } } } },
-    });
-    try {
-      const tools = await client.listTools();
-      const whoamiTool = Object.values(tools)[0] as { execute: (input: object, context: object) => Promise<unknown> };
-      return JSON.stringify(await whoamiTool.execute({}, {}));
-    } finally {
-      await client.disconnect();
-    }
-  };
-
   const versions = [
     ['@mastra/mcp 1.x', () => new MCPServer({ id: 's', name: 's', version: '1', tools: { whoami } }), callWhoamiV1],
     ['@mastra/mcp 2.x', () => new MCPServerV2({ id: 's', name: 's', version: '1', tools: { whoami } }), callWhoamiV2],
