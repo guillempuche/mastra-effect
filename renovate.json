@@ -47,7 +47,7 @@
       "allowedVersions": "<2.0.0"
     },
     {
-      "description": "Effect and its companion packages are released together on the rc line and must stay on one version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs a `git subtree pull` that no bot can do, which CI asserts.",
+      "description": "Effect and its companion packages are released together on the rc line and must stay on one version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs scripts/update-vendored-effect.sh, which no bot can run and CI asserts.",
       "matchPackageNames": [
         "effect",
         "@effect/**"

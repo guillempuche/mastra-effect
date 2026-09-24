@@ -7,6 +7,11 @@ pre-commit:
   jobs:
     - name: lint
       glob: '*.{ts,tsx,js,mjs,cjs}'
+      # The vendored Effect source is not ours to lint. Excluded here as well as in
+      # .oxlintrc.json: a commit that touches only it would otherwise hand oxlint a
+      # list of files it ignores, and oxlint fails on "No files found to lint".
+      exclude:
+        - 'docs/repos/**'
       # -c is required: without it oxlint discovers the vendored subtree's own
       # config under docs/repos and dies loading a plugin this repo lacks.
       run: pnpm exec oxlint -c .oxlintrc.json {staged_files}
