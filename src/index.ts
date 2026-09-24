@@ -962,21 +962,23 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
    * Context is built per route because Effect has no `derive`-style request hook. What does need
    * every request, matched or not, is the warning for a channel webhook nobody registered, which
    * shows up as a 404 no route would ever log — so it runs here, as in `@mastra/hono`.
+   *
+   * It wraps the app's own routes too, since they share the router, so it steps aside at once for
+   * anything that cannot be such a webhook: every method but POST, and a target with no parsable path.
    */
   registerContextMiddleware(): void {
     Effect.runSync(
       this.app.addGlobalMiddleware(httpEffect =>
-        Effect.flatMap(HttpServerRequest.HttpServerRequest, serverRequest =>
-          Effect.onExit(httpEffect, exit =>
+        Effect.flatMap(HttpServerRequest.HttpServerRequest, serverRequest => {
+          if (serverRequest.method.toUpperCase() !== 'POST') return httpEffect;
+          const url = parseTarget(serverRequest.url);
+          if (!url) return httpEffect;
+          return Effect.onExit(httpEffect, exit =>
             Effect.map(statusOf(exit), status =>
-              this.warnIfUnregisteredChannelWebhook(
-                new URL(serverRequest.url, 'http://localhost').pathname,
-                serverRequest.method,
-                status,
-              ),
+              this.warnIfUnregisteredChannelWebhook(url.pathname, serverRequest.method, status),
             ),
-          ),
-        ),
+          );
+        }),
       ),
     );
   }
@@ -992,9 +994,10 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     Effect.runSync(
       this.app.addGlobalMiddleware(httpEffect =>
         Effect.flatMap(HttpServerRequest.HttpServerRequest, serverRequest => {
-          // `url` may be origin-relative, so give URL a base purely to parse it.
-          const url = new URL(serverRequest.url, 'http://localhost');
-          if (!this.shouldLogRequest(url.pathname)) return httpEffect;
+          const url = parseTarget(serverRequest.url);
+          // A target with no parsable path is logged as it arrived.
+          const path = url?.pathname ?? serverRequest.url;
+          if (!this.shouldLogRequest(path)) return httpEffect;
 
           const start = Date.now();
           // On exit rather than on success, so a request no route matched — which fails instead of
@@ -1005,13 +1008,13 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
               const level = this.httpLoggingConfig?.level || 'info';
               const logData: Record<string, any> = {
                 method: serverRequest.method,
-                path: url.pathname,
+                path,
                 status,
                 duration: `${duration}ms`,
               };
 
               if (this.httpLoggingConfig?.includeQueryParams) {
-                logData.query = Object.fromEntries(url.searchParams);
+                logData.query = Object.fromEntries(url?.searchParams ?? []);
               }
 
               if (this.httpLoggingConfig?.includeHeaders) {
@@ -1022,7 +1025,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
                 logData.headers = headers;
               }
 
-              this.logger[level](`${serverRequest.method} ${url.pathname} ${status} ${duration}ms`, logData);
+              this.logger[level](`${serverRequest.method} ${path} ${status} ${duration}ms`, logData);
             }),
           );
         }),
@@ -1086,6 +1089,21 @@ const abortOnDisconnect: Effect.Effect<AbortSignal, never, Scope.Scope> = Effect
     controller.signal,
   );
 });
+
+/**
+ * The target a request asked for, as a URL, for reading its path and query. `url` may be
+ * origin-relative, so URL gets a base purely to parse it.
+ *
+ * `undefined` for a target URL cannot parse, such as `//[`, which Node still accepts. Throwing
+ * instead would fail the request as a defect, so the router's 404 for it would become a 500.
+ */
+const parseTarget = (url: string): URL | undefined => {
+  try {
+    return new URL(url, 'http://localhost');
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * The status a request is answered with, including when it failed instead of producing a response

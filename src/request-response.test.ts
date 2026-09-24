@@ -6,9 +6,12 @@
  * cookies sharing a name collapsed, and one Effect cannot serialise left the client waiting; a
  * refreshed session cookie was lost when the route failed, and replaced the route's own cookies;
  * `cause.failingItems` was dropped from errors; a route returning the wrong shape answered 200; a
- * stream failing partway broke the body in a fetch handler; and a request no route matched was
- * never logged, nor checked for an unregistered channel webhook.
+ * stream failing partway broke the body in a fetch handler; a request no route matched was never
+ * logged, nor checked for an unregistered channel webhook; and a request target URL cannot parse
+ * failed with a 500 instead of the router's 404.
  */
+import { connect } from 'node:net';
+
 import { Mastra } from '@mastra/core';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { createRoute } from '@mastra/server/server-adapter';
@@ -244,5 +247,30 @@ describe('a request no route matches', () => {
     await viaFetchHandler(router, new Request('http://localhost/api/agents/a1/channels/slack/webhook', { method: 'POST' }));
 
     expect(webhookCheck).toHaveBeenCalledWith('/api/agents/a1/channels/slack/webhook', 'POST', 404);
+  });
+});
+
+/** Sends a request line as written, which `fetch` would refuse to, and resolves with the status. */
+const sendRaw = (method: string, target: string) =>
+  new Promise<number>((resolve, reject) => {
+    let rawResponse = '';
+    const socket = connect(node.port, '127.0.0.1', () =>
+      socket.write(`${method} ${target} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`),
+    );
+    socket.on('data', chunk => (rawResponse += chunk.toString()));
+    socket.on('error', reject);
+    socket.on('close', () => resolve(Number(rawResponse.split(' ')[1])));
+  });
+
+describe('a request target that is not a valid URL', () => {
+  it.each(['GET', 'POST'])('should get the 404 of a path no route matches, on %s', async method => {
+    // GIVEN a target Node accepts but URL cannot parse, as scanners send
+    // WHEN it reaches the adapter's middleware, which reads the path of every request
+    const status = await sendRaw(method, '//[');
+
+    // THEN it should be answered like any path no route matches, not fail the request with a 500
+    expect(status).toBe(404);
+    // AND the request log should record it as it arrived
+    expect(requestLog.mock.calls.map(([line]) => line)).toEqual([expect.stringMatching(new RegExp(`^${method} //\\[ 404 `))]);
   });
 });
