@@ -34,7 +34,15 @@ pnpm lint          # oxlint
   should be what fails first.
 - `src/router-collision.test.ts` — records how Effect's router resolves Mastra's four
   same-prefix/different-param-name route pairs. A tripwire, not a feature test.
-- `src/conformance.test.ts` — `setupAdapter` / `executeHttpRequest` wiring for the published suites.
+- `src/conformance.test.ts` — wiring for all six of Mastra's published conformance suites.
+- `src/regressions.test.ts`, `src/request-body.test.ts`, `src/request-response.test.ts`,
+  `src/cancellation.test.ts`, `src/mcp.test.ts` — what the suites do not reach, each case a defect
+  that was reproduced before it was fixed. `src/test-support.ts` holds their shared helpers: the
+  router served through a fetch handler, and on a real Node server.
+- `scripts/check-vendored-effect.mjs` — `pnpm lint-vendor`, run by CI and the pre-push hook.
+- `examples/*` — one runnable app per use case, each a workspace member with its own tests. Which
+  example covers what is listed once, in the README's Examples table; read that rather than
+  opening examples at random.
 - `docs/repos/effect` — Effect source vendored as a squashed `git subtree`, pinned to the tag the
   adapter compiles against. Read it instead of guessing at `unstable/http` internals.
 
@@ -58,23 +66,21 @@ to.
 
 ---
 
-## Testing runs against an older Mastra than the package declares
+## Which Mastra the tests run against
 
-Every manifest declares `@mastra/*` at `^1.68.0`, which is what a consumer should get. Tests run
-against `1.68.0-alpha.10`, pinned by `overrides` in `pnpm-workspace.yaml`.
+`@mastra/server` is a dependency at `^1.68.0` and `@mastra/core` a peer from `1.68.0`. The lockfile
+resolves the newest release, so every job but one tests that; the `Oldest supported Mastra` CI job
+pins both to the floor read from `package.json` and runs the whole suite again. Raising the floor
+therefore needs nothing but the edit — the job follows it.
 
-The reason is a single route. The pinned conformance suite (`0.1.0-alpha.0`) asserts that every
-route it does not explicitly exclude answers under 400, and stable `1.68.0` changed
-`POST /auth/logout` to reply `404 {"error":"Logout not configured"}` when no logout provider is
-configured. The suite already excludes the auth routes that need providers — `sso/login`,
-`credentials/sign-in`, `refresh` and others — but not `logout`, so it fails on a route this adapter
-forwards perfectly correctly. Worth reporting upstream.
+**Do not turn the declared range into a prerelease floor.** `^1.68.0-alpha.10` looks harmless and is
+not: a consumer using `minimumReleaseAge` has the fresh stable gated out while the older alpha still
+satisfies the range, so pnpm silently resolves the prerelease and says nothing.
 
-Remove the override once a suite release covers the stable line, and re-run the suite to confirm.
-
-**Do not turn the declared range back into a prerelease floor.** `^1.68.0-alpha.10` looks harmless
-and is not: a consumer using `minimumReleaseAge` has the fresh stable gated out while the older
-alpha still satisfies the range, so pnpm silently resolves the prerelease and says nothing.
+MCP servers come from `@mastra/mcp`, which the adapter does not depend on — it forwards to whatever
+server the app built. Both majors are tested: `@mastra/mcp` is 2.x, which Mastra's MCP transport suite
+asserts, and `@mastra/mcp-v1` is a 1.x alias for `src/mcp.test.ts`, whose session-based defects only
+1.x can show. `pnpm-workspace.yaml` says why the suite's own `<2` peer range is overridden.
 
 ## Route handlers must not surface a typed error
 
@@ -84,9 +90,29 @@ registration bridge Effect to Promise once per route. Anything that can fail mus
 
 ---
 
+## Adding an example
+
+An example covers one use case. Give it a README that opens with "Use this when" and "Look elsewhere
+when", tests that run under `pnpm test`, and a row in the README's Examples table — that table is
+the only index, so an example missing from it is an example nobody finds. CI picks up anything under
+`examples/` on its own.
+
+Recursive runs are sequential (`workspaceConcurrency: 1` in `pnpm-workspace.yaml`). Do not raise it:
+each example rebuilds the library before it runs, and parallel builds delete `dist/` under each other.
+
+---
+
 ## Conventions
 
 When adding response-type handling, mirror `@mastra/elysia` (`server-adapters/elysia` in the Mastra
 monorepo). It is the closest in-tree adapter, being fetch-based, and it already encodes decisions
 this adapter would otherwise have to rediscover — stream framing, `Transfer-Encoding` stripping, and
 not awaiting the MCP transport start call.
+
+Where behaviour is at stake, `@mastra/hono` is the reference: it is Mastra's own, and Elysia shares
+several of the defects fixed here (repeated query keys, MCP start failures, `failingItems`). The MCP
+client-disconnect handling is ported from it; NOTICE records what came from where.
+
+When an Effect upgrade lands, the vendored subtree has to follow by hand — no bot can run
+`git subtree pull`, so a dependency PR that bumps `effect` fails `pnpm lint-vendor` until someone
+does.
