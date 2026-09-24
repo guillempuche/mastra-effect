@@ -57,6 +57,7 @@ minimumReleaseAgeExclude:
 # behaviour — a legacy SSE endpoint that answers 404, which only a 2.x server does — and the Mastra
 # monorepo runs it against 2.x. So it runs against 2.x here too. This accepts exactly that pairing;
 # every other peer mismatch still warns. 1.x servers are tested through the `@mastra/mcp-v1` alias.
+# Remove this rule once the suite's range allows 2.x: https://github.com/mastra-ai/mastra/issues/24949
 peerDependencyRules:
   allowedVersions:
     '@mastra/server-adapters-test-suite>@mastra/mcp': '2'
