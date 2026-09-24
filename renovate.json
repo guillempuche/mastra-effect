@@ -10,7 +10,7 @@
   "prConcurrentLimit": 3,
   "description": [
     "minimumReleaseAge is longer than pnpm's own floor, so Renovate never opens a PR for a version pnpm would then refuse to resolve. It is also the window in which a compromised release is usually caught.",
-    "ignoreUnstable is off because effect tracks the rc dist-tag on purpose. Mastra is followed on its stable line; the alpha is pinned locally by a pnpm override for testing only, which Renovate does not manage."
+    "ignoreUnstable is off because effect tracks the rc dist-tag on purpose. Mastra is followed on its stable line, and tested on both the newest release and the oldest one package.json declares (the CI job 'Oldest supported Mastra')."
   ],
   "minimumReleaseAge": "3 days",
   "ignoreUnstable": false,
@@ -29,7 +29,7 @@
       "enabled": false
     },
     {
-      "description": "@mastra/core and @mastra/server must move together - a single bump leaves a tree where the conformance suite fails for reasons that look nothing like the cause. Tracked on the stable line; the testing override in pnpm-workspace.yaml is separate and deliberate.",
+      "description": "@mastra/core and @mastra/server must move together - a single bump leaves a tree where the conformance suite fails for reasons that look nothing like the cause. Tracked on the stable line.",
       "matchPackageNames": [
         "@mastra/core",
         "@mastra/server",
@@ -38,6 +38,13 @@
       ],
       "groupName": "mastra",
       "rangeStrategy": "replace"
+    },
+    {
+      "description": "@mastra/mcp-v1 is an alias kept on the 1.x line on purpose, so MCP 1.x servers stay tested next to 2.x; bumping it to 2.x would silently remove that coverage.",
+      "matchDepNames": [
+        "@mastra/mcp-v1"
+      ],
+      "allowedVersions": "<2.0.0"
     },
     {
       "description": "Effect and its companion packages are released together on the rc line and must stay on one version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs a `git subtree pull` that no bot can do, which CI asserts.",

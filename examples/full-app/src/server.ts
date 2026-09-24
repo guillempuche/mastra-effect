@@ -6,10 +6,10 @@ import { NodeHttpServer } from '@effect/platform-node';
 import { Effect, Layer } from 'effect';
 import { HttpEffect, HttpServer, HttpServerResponse } from 'effect/unstable/http';
 
-import { createAuth } from './auth';
-import { createMastra } from './mastra';
-import { recordRequests, telemetryLayer } from './observability';
-import { scalarPage } from './scalar';
+import { createAuth } from './auth.ts';
+import { createMastra } from './mastra.ts';
+import { recordRequests, telemetryLayer } from './observability.ts';
+import { scalarPage } from './scalar.ts';
 
 export interface BuildOptions {
   readonly baseURL?: string;
@@ -18,7 +18,10 @@ export interface BuildOptions {
 }
 
 /**
- * Assembles the whole server, in the order the routes are matched.
+ * Assembles the whole server.
+ *
+ * Registration order does not decide which route answers — the router matches the most specific
+ * path — except among global middlewares, where the first registered is the outermost.
  *
  * The app owns the router. Mastra is handed that same instance rather than creating its own, which
  * is what lets the app's routes, Better Auth and Mastra's ~400 routes share one port, one router
@@ -58,7 +61,7 @@ export async function buildServer(options: BuildOptions = {}): Promise<EffectRou
     router.add('*', '/auth/*', Effect.orDie(HttpEffect.fromWebHandler(request => auth.handler(request)))),
   );
 
-  // Mastra registers its whole route table onto the same router. `openapiPath` makes it publish the
+  // Mastra adds each of its routes to the same router — it does not bring a router of its own. `openapiPath` makes it publish the
   // spec that /docs renders.
   const adapter = new MastraServer({ app: router, mastra, prefix, openapiPath: '/openapi.json' });
   await adapter.init();
@@ -69,15 +72,16 @@ export async function buildServer(options: BuildOptions = {}): Promise<EffectRou
 /**
  * Serves the assembled router on Node.
  *
- * The telemetry layer is merged rather than only provided: a layer can pass a service down to what
- * it builds, or hand it back to whoever builds on top, and those are different things that look
- * identical to the compiler. Provided without merging, the process boots, reports that export is
- * enabled, and sends none of its own lines.
+ * The telemetry layer is provided to the server, not merged beside it. The compiler accepts both,
+ * but a merged layer is built next to the server rather than underneath it, so the server never
+ * sees the tracer or the log exporter: with the endpoint set, the process boots and exports
+ * nothing, with no error to say so. Checked against a local OTLP receiver — merged, it received
+ * nothing; provided, it received traces and logs.
  */
 export const serve = (router: EffectRouter, port: number) =>
   HttpServer.serve()(router.asHttpEffect()).pipe(
     Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
-    Layer.merge(telemetryLayer({ serviceName: 'mastra-in-an-effect-server' })),
+    Layer.provide(telemetryLayer({ serviceName: 'example-full-app' })),
   );
 
 // Compare the whole resolved path, not the basename: `endsWith(basename)` also matches any other

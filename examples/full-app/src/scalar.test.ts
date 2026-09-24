@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { scalarPage } from './scalar';
+import { scalarPage } from './scalar.ts';
 
 describe('scalarPage', () => {
   describe('given a spec url and title', () => {

@@ -1,0 +1,28 @@
+{
+  "name": "@guillem_puche/example-alongside-your-routes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mastra's routes added into your own Effect router, next to your routes, with one shared middleware stack",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "pretest": "pnpm --filter @guillem_puche/mastra-effect build",
+    "pretypecheck": "pnpm --filter @guillem_puche/mastra-effect build"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.117",
+    "@guillem_puche/mastra-effect": "workspace:*",
+    "@mastra/core": "^1.68.0",
+    "effect": "4.0.0-rc.117"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

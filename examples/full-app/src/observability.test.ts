@@ -1,7 +1,7 @@
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import { describe, expect, it } from 'vitest';
 
-import { eventForStatus, sanitizePath } from './observability';
+import { eventForStatus, sanitizePath } from './observability.ts';
 
 describe('sanitizePath', () => {
   describe('given a url carrying a secret in the query', () => {

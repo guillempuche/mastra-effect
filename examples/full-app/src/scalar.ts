@@ -4,7 +4,8 @@
  * serves it as an ordinary route. So the docs page points Scalar at that spec URL instead.
  *
  * Use `HttpApiScalar.layerCdn` for the app's own `HttpApi`-defined routes; the two can coexist on
- * separate paths, which is how Better Auth already serves its reference at `/auth/reference`.
+ * separate paths. Better Auth can serve a reference of its own at `/auth/reference` too, once its
+ * `openAPI()` plugin is enabled — this example does not enable it.
  */
 export interface ScalarPageOptions {
   /** Where the OpenAPI document is served, e.g. `/api/openapi.json`. */

@@ -1,13 +1,24 @@
 /**
- * Mastra's published conformance suites, run against the Effect adapter.
+ * Mastra's published conformance suites, run against the Effect adapter — all six of them.
  *
  * `createRouteAdapterTestSuite` iterates SERVER_ROUTES live rather than a hand-written list, so
  * this is what lets the README claim route parity instead of "tested against the routes I thought of".
+ * The other suites are wired the way `@mastra/elysia`, the closest official adapter, wires them.
  */
 import type { AdapterSetupOptions, AdapterTestContext, HttpRequest, HttpResponse } from '@mastra/server-adapters-test-suite';
-import { createMCPRouteTestSuite, createRouteAdapterTestSuite } from '@mastra/server-adapters-test-suite';
+import {
+  createBodyLimitTestSuite,
+  createHttpLoggingTestSuite,
+  createMCPRouteTestSuite,
+  createMCPTransportTestSuite,
+  createMultipartTestSuite,
+  createRouteAdapterTestSuite,
+} from '@mastra/server-adapters-test-suite';
+import { Effect } from 'effect';
+import { HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
 
 import { MastraServer, createRouter, toWebHandler, type EffectRouter } from './index';
+import { onNodeServer } from './test-support';
 
 /** One web handler per router; the router is mutable, so later registrations stay visible. */
 const handlers = new WeakMap<object, ReturnType<typeof toWebHandler>>();
@@ -15,7 +26,7 @@ const handlers = new WeakMap<object, ReturnType<typeof toWebHandler>>();
 function handlerFor(router: EffectRouter) {
   let handler = handlers.get(router);
   if (!handler) {
-    handler = toWebHandler(router);
+    handler = toWebHandler(router, { disableLogger: true });
     handlers.set(router, handler);
   }
   return handler;
@@ -103,4 +114,84 @@ createMCPRouteTestSuite({
   suiteName: 'Effect server adapter (MCP routes)',
   setupAdapter,
   executeHttpRequest,
+});
+
+/** Sends a request through the router the way a fetch-based host would; only the status matters here. */
+const fetchStatus = async (app: EffectRouter, request: Request) => ({
+  status: (await handlerFor(app).handler(request)).status,
+});
+
+createBodyLimitTestSuite<EffectRouter>({
+  suiteName: 'Effect server adapter (body limit)',
+  createApp: () => createRouter(),
+  setupAdapter: (app, mastra, bodyLimitOptions) => ({ adapter: new MastraServer({ app, mastra, bodyLimitOptions }), app }),
+  registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+  // A real HTTP client declares the length; `new Request` does not, so it is set here as one would.
+  executeRequest: (app, method, url, options = {}) => {
+    const headers = new Headers(options.headers);
+    if (options.body) headers.set('content-length', String(Buffer.byteLength(options.body)));
+    return fetchStatus(app, new Request(url, { method, headers, ...(options.body ? { body: options.body } : {}) }));
+  },
+  executeRequestWithoutContentLength: (app, method, url, options = {}) =>
+    fetchStatus(app, new Request(url, { method, headers: options.headers, ...(options.body ? { body: options.body } : {}) })),
+});
+
+createHttpLoggingTestSuite<EffectRouter>({
+  suiteName: 'Effect server adapter (HTTP logging)',
+  createApp: () => createRouter(),
+  setupAdapter: (app, mastra) => ({ adapter: new MastraServer({ app, mastra }), app }),
+  addRoute: (app, method, path, handler) =>
+    Effect.runPromise(
+      app.add(method, path as `/${string}`, (serverRequest: HttpServerRequest.HttpServerRequest) =>
+        Effect.promise(async () => {
+          const result = await handler(serverRequest);
+          // Only a number is a status: the suite's own routes return bodies like `{ status: 'ok' }`.
+          return typeof result?.status === 'number'
+            ? HttpServerResponse.jsonUnsafe(result.body ?? {}, { status: result.status })
+            : HttpServerResponse.jsonUnsafe(result);
+        }),
+      ),
+    ),
+  executeRequest: (app, method, url, options = {}) =>
+    fetchStatus(
+      app,
+      new Request(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...options.headers },
+        ...(options.body ? { body: options.body } : {}),
+      }),
+    ),
+});
+
+createMultipartTestSuite({
+  suiteName: 'Effect server adapter (multipart)',
+  setupAdapter: async (context, options) => {
+    const app = createRouter();
+    const adapter = new MastraServer({
+      app,
+      mastra: context.mastra,
+      taskStore: context.taskStore,
+      bodyLimitOptions: options?.bodyLimitOptions,
+    });
+    await adapter.init();
+    return { adapter, app };
+  },
+  startServer: async app => {
+    const server = await onNodeServer(app);
+    return { baseUrl: server.origin, cleanup: server.close };
+  },
+  registerRoute: (adapter, app, route, options) => adapter.registerRoute(app, route, options ?? { prefix: '' }),
+  getContextMiddleware: adapter => adapter.createContextMiddleware(),
+  // Nothing to apply: Effect has no `derive`, so the adapter builds the context inside each route.
+  applyMiddleware: () => {},
+});
+
+createMCPTransportTestSuite({
+  suiteName: 'Effect server adapter (MCP transports)',
+  createServer: async mastra => {
+    const app = createRouter();
+    await new MastraServer({ app, mastra }).init();
+    const server = await onNodeServer(app);
+    return { server: { close: () => void server.close() }, port: server.port };
+  },
 });

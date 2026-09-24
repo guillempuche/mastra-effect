@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 // Imported by subpath, not from the barrel: the barrel re-exports WebSdk, which drags
 // @opentelemetry/sdk-trace-web into a Node-only process.
 import * as NodeSdk from '@effect/opentelemetry/NodeSdk';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { EffectRouter } from '@guillem_puche/mastra-effect';
-import { Effect, Layer } from 'effect';
-import { HttpServerRequest } from 'effect/unstable/http';
+import { Effect, Exit, Layer } from 'effect';
+import { HttpServerError, HttpServerRequest, type HttpServerResponse } from 'effect/unstable/http';
 
 /**
  * Observability for this example, following docs/observability.md in the batuda repo.
@@ -95,6 +97,15 @@ export function eventForStatus(status: number): HttpEvent {
 }
 
 /**
+ * The status a request is answered with. One no route matched fails instead of producing a response,
+ * so its status is asked of the failure — the way Effect's server does when it answers it.
+ */
+const answeredStatus = (exit: Exit.Exit<HttpServerResponse.HttpServerResponse, unknown>): Effect.Effect<number> =>
+  Exit.isSuccess(exit)
+    ? Effect.succeed(exit.value.status)
+    : Effect.map(HttpServerError.causeResponse(exit.cause), ([response]) => response.status);
+
+/**
  * Emits one record per request.
  *
  * Register this **before anything else that can answer a request itself**. Middleware that responds
@@ -113,31 +124,35 @@ export function recordRequests(router: EffectRouter): void {
         const pathPattern = sanitizePath(request.url);
         const started = Date.now();
 
-        return Effect.flatMap(httpEffect, response => {
-          const event = eventForStatus(response.status);
-          const record = {
-            event,
-            'request.id': requestId,
-            'http.method': request.method,
-            'http.path_pattern': pathPattern,
-            'http.status': response.status,
-            'http.duration_ms': Date.now() - started,
-          };
+        // On exit, not on success: a request no route matched fails rather than producing a
+        // response, and a bot probing for `/robots.txt` still deserves its `http.not_found` record.
+        return Effect.onExit(httpEffect, exit =>
+          Effect.flatMap(answeredStatus(exit), status => {
+            const event = eventForStatus(status);
+            const record = {
+              event,
+              'request.id': requestId,
+              'http.method': request.method,
+              'http.path_pattern': pathPattern,
+              'http.status': status,
+              'http.duration_ms': Date.now() - started,
+            };
 
-          // A poll that went fine says only that the poller is still polling; a failing one is the
-          // moment it exists for, so it keeps its usual level.
-          const quiet = QUIET_PATHS.has(pathPattern) && event === 'http.request';
-          const write = quiet
-            ? Effect.logDebug(event)
-            : event === 'http.server_error'
-              ? Effect.logError(event)
-              : Effect.logInfo(event);
+            // A poll that went fine says only that the poller is still polling; a failing one is the
+            // moment it exists for, so it keeps its usual level.
+            const quiet = QUIET_PATHS.has(pathPattern) && event === 'http.request';
+            const write = quiet
+              ? Effect.logDebug(event)
+              : event === 'http.server_error'
+                ? Effect.logError(event)
+                : Effect.logInfo(event);
 
-          // Annotations, not extra log arguments. `@effect/opentelemetry`'s logger builds OTLP
-          // attributes from annotations and folds message arguments into the body, so passing the
-          // record as a second argument would bury every field in a string nothing can group by.
-          return Effect.as(Effect.annotateLogs(write, record), response);
-        });
+            // Annotations, not extra log arguments. `@effect/opentelemetry`'s logger builds OTLP
+            // attributes from annotations and folds message arguments into the body, so passing the
+            // record as a second argument would bury every field in a string nothing can group by.
+            return Effect.annotateLogs(write, record);
+          }),
+        );
       }),
     ),
   );
@@ -162,8 +177,11 @@ export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (!endpoint) return Layer.empty;
 
+  // Logs as well as traces: the wide record above is a log line, and without a log processor it
+  // would reach the backend only folded into a span as an event.
   return NodeSdk.layer(() => ({
     resource: { serviceName: options.serviceName, serviceVersion: options.serviceVersion },
     spanProcessor: new BatchSpanProcessor(new OTLPTraceExporter()),
+    logRecordProcessor: new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
   }));
 }

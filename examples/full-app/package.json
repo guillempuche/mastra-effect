@@ -1,5 +1,5 @@
 {
-  "name": "@guillem_puche/mastra-in-an-effect-server",
+  "name": "@guillem_puche/example-full-app",
   "version": "0.0.0",
   "private": true,
   "description": "Effect owns the HTTP server; Mastra's routes, Better Auth and Scalar docs all mount onto it",
@@ -14,15 +14,16 @@
     "pretypecheck": "pnpm --filter @guillem_puche/mastra-effect build"
   },
   "dependencies": {
-    "@effect/opentelemetry": "4.0.0-rc.116",
-    "@effect/platform-node": "4.0.0-rc.116",
+    "@effect/opentelemetry": "4.0.0-rc.117",
+    "@effect/platform-node": "4.0.0-rc.117",
     "@guillem_puche/mastra-effect": "workspace:*",
     "@mastra/auth-better-auth": "^1.1.5",
     "@mastra/core": "^1.68.0",
-    "@mastra/mcp": "^1.18.0",
+    "@mastra/mcp": "^2.0.0",
     "@mastra/server": "^1.68.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.222.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-logs": "^0.222.0",
@@ -31,7 +32,8 @@
     "@opentelemetry/sdk-trace-node": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "better-auth": "^1.7.4",
-    "effect": "4.0.0-rc.116"
+    "effect": "4.0.0-rc.117",
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

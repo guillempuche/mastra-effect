@@ -5,6 +5,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   isZodError,
@@ -12,9 +13,9 @@ import {
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
-import { Effect, Layer } from 'effect';
+import { Effect, Exit, Layer, type Scope } from 'effect';
 import type { FindMyWay } from 'effect/unstable/http';
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
+import { Cookies, HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
 import { toFetchResponse, toReqRes } from 'fetch-to-node';
 
 export type EffectRouter = HttpRouter.HttpRouter;
@@ -23,8 +24,8 @@ export type EffectRouter = HttpRouter.HttpRouter;
  * Everything the adapter threads through a single request.
  *
  * Bound to both `TRequest` and `TResponse`. Effect has no mutable response object, and the base
- * class never reads the `TResponse` argument — it only uses `sendResponse`'s return value — so the
- * slot carries the request-side data `sendResponse` needs, the same way `@mastra/elysia` carries its
+ * class never calls `sendResponse` itself — this adapter does, from `handleRoute` — so the slot
+ * carries the request-side data `sendResponse` needs, the same way `@mastra/elysia` carries its
  * framework context there. Passing an explicit object (rather than stashing properties on the
  * `Request`) keeps `getParams` and `sendResponse` honest when called outside `handleRoute`.
  */
@@ -34,6 +35,8 @@ export interface EffectRequestContext {
   /** Parsed once per request so nothing downstream re-reads the body. */
   readonly body: unknown;
   readonly bodyParseError?: { message: string };
+  /** The request's Mastra context, which MCP transports need to learn who the caller is. */
+  readonly requestContext?: RequestContext;
 }
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
@@ -51,7 +54,7 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
     .then(m => m.hasPermission)
     .catch(() => {
       console.error(
-        '[@guillem_puche/mastra-effect] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        '[@guillem_puche/mastra-effect] Auth features require @mastra/core >= 1.68.0. Please upgrade: npm install @mastra/core@latest',
       );
       return undefined;
     });
@@ -62,6 +65,22 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' } as const;
 
 function json(body: unknown, status = 200, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), { status: toHttpStatus(status), headers: { ...JSON_HEADERS, ...headers } });
+}
+
+/**
+ * Adds headers to a response, appending `Set-Cookie` so a refreshed session cookie joins the ones the
+ * route set instead of replacing them.
+ */
+function withHeaders(response: Response, headers: Record<string, string>): Response {
+  const entries = Object.entries(headers);
+  if (entries.length === 0) return response;
+  // A Response from `fetch`, or one a route built with frozen headers, cannot be edited in place.
+  const editable = new Response(response.body, response);
+  for (const [key, value] of entries) {
+    if (key.toLowerCase() === 'set-cookie') editable.headers.append(key, value);
+    else editable.headers.set(key, value);
+  }
+  return editable;
 }
 
 /** `new Response` throws outside 200-599, and this runs on the last-resort error path. */
@@ -140,13 +159,70 @@ async function createForwardRequest(request: Request, parsedBody: unknown): Prom
 
 /** Strips hop-by-hop framing the outer fetch layer re-applies; leaving it causes double-chunking. */
 function forwardResponse(source: Response): Response {
-  const headers = new Headers(source.headers);
-  headers.delete('Transfer-Encoding');
   return new Response(createSafeReadableStream(source.body), {
     status: source.status,
     statusText: source.statusText,
-    headers,
+    headers: withoutTransferEncoding(source.headers),
   });
+}
+
+function withoutTransferEncoding(source: Headers): Headers {
+  const headers = new Headers(source);
+  headers.delete('Transfer-Encoding');
+  return headers;
+}
+
+/**
+ * Forwards what an MCP transport wrote, and tells the transport when the client goes away.
+ *
+ * `fetch-to-node` builds the body from the simulated Node response but never learns that the
+ * stream it handed back was cancelled. Nothing then tells the transport the client is gone, so its
+ * keep-alive timer keeps firing, and the next tick writes into a closed stream — an
+ * `ERR_INVALID_STATE` thrown from a timer, which nothing can catch and which ends the process.
+ * Emitting `close` on the response is what the MCP transport listens for: it stops, and ends the
+ * response itself.
+ *
+ * The bridge stream is drained rather than cancelled, for the same reason: `fetch-to-node` flushes
+ * buffered writes from a timer, and cancelling its stream leaves that flush writing into a closed
+ * one. Ported from `@mastra/hono`'s `propagateClientDisconnect` (see NOTICE).
+ */
+function forwardMcpResponse(source: Response, res: { emit: (event: string) => unknown }): Response {
+  const init = { status: source.status, statusText: source.statusText, headers: withoutTransferEncoding(source.headers) };
+  const upstream = source.body;
+  if (!upstream) return new Response(null, init);
+
+  const reader = upstream.getReader();
+  let disconnected = false;
+
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch {
+        // Keep what was already delivered, as forwardResponse does.
+        controller.close();
+      }
+    },
+    cancel() {
+      if (disconnected) return;
+      disconnected = true;
+      try {
+        res.emit('close');
+      } catch {
+        // Already torn down: the transport has nothing left to stop.
+      }
+      void reader.read().then(
+        function drain({ done }): unknown {
+          return done ? undefined : reader.read().then(drain);
+        },
+        () => {},
+      );
+    },
+  });
+
+  return new Response(body, init);
 }
 
 /** Maps a Mastra route method onto what Effect's router accepts, rather than asserting it blindly. */
@@ -198,7 +274,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         }
       }
 
-      if (method === 'GET') {
+      // POST too, as in @mastra/hono: a client may put the context in the query whatever the method.
+      if (method === 'GET' || method === 'POST') {
         const encoded = new URL(request.url).searchParams.get('requestContext');
         if (encoded) {
           try {
@@ -226,9 +303,13 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
 
   async getParams(route: ServerRoute, ctx: EffectRequestContext): Promise<ParsedRequestParams> {
     const url = new URL(ctx.request.url);
+    // Every value of a repeated key (`?tags=a&tags=b`), which Mastra's schemas accept as an array;
+    // `normalizeQueryParams` turns a key given once back into a plain string.
+    const query: Record<string, string[]> = {};
+    for (const key of new Set(url.searchParams.keys())) query[key] = url.searchParams.getAll(key);
     return {
       urlParams: ctx.pathParams,
-      queryParams: normalizeQueryParams(Object.fromEntries(url.searchParams)),
+      queryParams: normalizeQueryParams(query),
       body: ctx.body,
       bodyParseError: ctx.bodyParseError,
     };
@@ -238,7 +319,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
    * Reads and parses the body exactly once.
    *
    * `oversize` rather than a body when the limit is blown: a chunked request declares no
-   * `Content-Length`, so measuring what actually arrived is the only way to enforce the cap.
+   * `Content-Length`, so counting what actually arrives is the only way to enforce the cap — for
+   * uploads as much as for JSON.
    */
   private async readBody(
     route: ServerRoute,
@@ -248,25 +330,27 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     if (!BODY_METHODS.has(route.method.toUpperCase())) return {};
 
     const contentType = request.headers.get('content-type') ?? '';
+    const isMultipart = contentType.includes('multipart/form-data');
+    if (!isMultipart && !contentType.includes('application/json')) return {};
 
-    if (contentType.includes('multipart/form-data')) {
+    const bytes = await readBytesWithin(request.clone(), maxSize);
+    if (bytes === undefined) return { oversize: true };
+
+    if (isMultipart) {
       try {
-        return { body: await this.parseFormData(await request.clone().formData()) };
+        const form = await new Response(bytes, { headers: { 'content-type': contentType } }).formData();
+        return { body: await this.parseFormData(form) };
       } catch (error) {
         this.mastra.getLogger()?.error('Failed to parse multipart form data', {
           error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
         });
-        if (error instanceof Error && error.message.toLowerCase().includes('size')) return { oversize: true };
         return {
           bodyParseError: { message: error instanceof Error ? error.message : 'Failed to parse multipart form data' },
         };
       }
     }
 
-    if (!contentType.includes('application/json')) return {};
-
-    const text = await request.clone().text();
-    if (maxSize !== undefined && new TextEncoder().encode(text).byteLength > maxSize) return { oversize: true };
+    const text = new TextDecoder().decode(bytes);
     if (text.trim().length === 0) return {};
 
     try {
@@ -312,8 +396,12 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         : { 'Content-Type': 'text/plain' };
 
     // `sendResponse` casts rather than checks, so a route handler that returns a bare stream instead
-    // of the `{ fullStream }` shape still arrives here.
-    const source = result instanceof ReadableStream ? result : result.fullStream;
+    // of the `{ fullStream }` shape still arrives here — and so can one that returns no stream at all,
+    // which must fail as a 500 now rather than as a 200 whose body then breaks.
+    const source: unknown = result instanceof ReadableStream ? result : result?.fullStream;
+    if (!(source instanceof ReadableStream)) {
+      throw new Error(`Route ${route.path} declares a stream response but returned no stream`);
+    }
     let reader: ReadableStreamDefaultReader | undefined;
 
     const stream = new ReadableStream<Uint8Array>({
@@ -357,9 +445,10 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Throws if the consumer already cancelled, which is not itself worth surfacing.
+          // Closed rather than errored, as in @mastra/hono, so the chunks already sent are delivered the
+          // same way on every transport. Throws if the consumer already cancelled, which is fine.
           try {
-            controller.error(error);
+            controller.close();
           } catch {
             // Already closed or errored.
           }
@@ -398,35 +487,48 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         return this.stream(route, ctx, result as { fullStream: ReadableStream });
 
       case 'datastream-response':
-        return forwardResponse(result as Response);
+        if (!(result instanceof Response)) {
+          throw new Error(`Route ${route.path} declares a Response but returned something else`);
+        }
+        return forwardResponse(result);
 
       case 'mcp-http': {
         const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        // `setRequestAuth` is the adapter's hook, not a transport option — the transport rejects it.
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
 
-        return this.bridgeMcpTransport(ctx, '[MCP HTTP] Error in background startHTTP', ({ url, req, res }) =>
-          server.startHTTP({
-            url,
-            httpPath: `${resolvedPrefix}${httpPath}`,
-            req,
-            res,
-            options: Object.keys(options).length > 0 ? options : undefined,
-          }),
-        );
+        return this.bridgeMcpTransport(ctx, {
+          label: '[MCP HTTP] Error in background startHTTP',
+          setRequestAuth,
+          // The client speaks JSON-RPC, so the failure is answered in it.
+          failureBody: { jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null },
+          start: ({ url, req, res }) =>
+            server.startHTTP({
+              url,
+              httpPath: `${resolvedPrefix}${httpPath}`,
+              req,
+              res,
+              options: Object.keys(options).length > 0 ? options : undefined,
+            }),
+        });
       }
 
       case 'mcp-sse': {
         const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
-        return this.bridgeMcpTransport(ctx, '[MCP SSE] Error in background startSSE', ({ url, req, res }) =>
-          server.startSSE({
-            url,
-            ssePath: `${resolvedPrefix}${ssePath}`,
-            messagePath: `${resolvedPrefix}${messagePath}`,
-            req,
-            res,
-          }),
-        );
+        return this.bridgeMcpTransport(ctx, {
+          label: '[MCP SSE] Error in background startSSE',
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+          failureBody: { error: 'Error handling MCP SSE request' },
+          start: ({ url, req, res }) =>
+            server.startSSE({
+              url,
+              ssePath: `${resolvedPrefix}${ssePath}`,
+              messagePath: `${resolvedPrefix}${messagePath}`,
+              req,
+              res,
+            }),
+        });
       }
 
       default:
@@ -443,19 +545,37 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
    */
   private async bridgeMcpTransport(
     ctx: EffectRequestContext,
-    errorMessage: string,
-    start: (transport: ReturnType<typeof toReqRes> & { url: URL }) => Promise<unknown>,
+    transport: {
+      readonly label: string;
+      readonly setRequestAuth?: Parameters<typeof applyMcpRequestAuth>[0]['setRequestAuth'];
+      readonly failureBody: unknown;
+      readonly start: (transport: ReturnType<typeof toReqRes> & { url: URL }) => Promise<unknown>;
+    },
   ): Promise<Response> {
     const forwardRequest = await createForwardRequest(ctx.request, ctx.body);
     const { req, res } = toReqRes(forwardRequest);
 
-    void start({ url: new URL(forwardRequest.url), req, res }).catch((error: unknown) => {
-      this.mastra.getLogger()?.error(errorMessage, {
+    // `toReqRes` builds a fresh Node request, so the caller Mastra's auth resolved never reaches the
+    // transport — and so never reaches the tools, as `authInfo` — unless it is carried over here.
+    await applyMcpRequestAuth({ req, requestContext: ctx.requestContext, setRequestAuth: transport.setRequestAuth });
+
+    void transport.start({ url: new URL(forwardRequest.url), req, res }).catch((error: unknown) => {
+      this.mastra.getLogger()?.error(transport.label, {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
+      // `toFetchResponse` below waits for headers, and a transport that failed before writing any
+      // never will: answer, or the client waits forever.
+      try {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(transport.failureBody));
+        }
+      } catch {
+        // Already closed or destroyed — nothing left to answer.
+      }
     });
 
-    return forwardResponse(await toFetchResponse(res));
+    return forwardMcpResponse(await toFetchResponse(res), res);
   }
 
   /** Never rejects — the caller runs it through `Effect.promise`, whose error channel is `never`. */
@@ -465,6 +585,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     request: Request,
     pathParams: Record<string, string>,
   ): Promise<Response> {
+    // Outside the try, so a refreshed session reaches the client even when the route then fails.
+    let refreshHeaders: Record<string, string> = {};
     try {
       const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
@@ -499,7 +621,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         return json({ error: authError.error }, authError.status, authError.headers);
       }
 
-      const refreshHeaders = authError?.headers ?? {};
+      refreshHeaders = authError?.headers ?? {};
 
       const permissionError = await this.resolvePermissionError(route, requestContext);
       if (permissionError) {
@@ -545,11 +667,10 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         request,
       });
 
-      const response = await this.sendResponse(route, { ...ctx, body: params.body }, result, prefix);
-      for (const [key, value] of Object.entries(refreshHeaders)) response.headers.set(key, value);
-      return response;
+      const response = await this.sendResponse(route, { ...ctx, body: params.body, requestContext }, result, prefix);
+      return withHeaders(response, refreshHeaders);
     } catch (error) {
-      return this.toErrorResponse(error, route);
+      return withHeaders(this.toErrorResponse(error, route), refreshHeaders);
     }
   }
 
@@ -662,7 +783,21 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     const customResponse = getCustomHTTPExceptionResponse(error);
     if (customResponse) return customResponse;
 
-    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, toHttpStatus(status));
+    // Which items failed, for an error that says — Studio's dataset form reads `cause.failingItems`.
+    // Only that field, so nothing else an error carries in its cause leaks to the client.
+    const cause = error instanceof Error ? error.cause : undefined;
+    const failingItems =
+      typeof status === 'number' && cause && typeof cause === 'object' && 'failingItems' in cause
+        ? (cause as { failingItems?: unknown }).failingItems
+        : undefined;
+
+    return json(
+      {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...(Array.isArray(failingItems) ? { cause: { failingItems } } : {}),
+      },
+      toHttpStatus(status),
+    );
   }
 
   async registerRoute(
@@ -673,17 +808,17 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     const prefix = prefixParam ?? this.prefix ?? '';
     const fullPath = `${prefix}${route.path}`;
 
-    // rc.116's vendored FindMyWay binds the correct param name per route even when two routes
+    // rc.117's vendored FindMyWay binds the correct param name per route even when two routes
     // differ only in their param name at the same segment, so paths register verbatim — no
     // positional rewrite is needed here (see src/router-collision.test.ts).
     const handler = (serverRequest: HttpServerRequest.HttpServerRequest) =>
-      Effect.flatMap(HttpRouter.params, pathParams =>
-        // orDie keeps the error channel at `never`: a request that cannot be materialized is a
-        // defect, not a recoverable route error, and `never` is what makes `add` runnable below.
-        Effect.flatMap(Effect.orDie(HttpServerRequest.toWeb(serverRequest)), webRequest =>
+      Effect.flatMap(Effect.zip(HttpRouter.params, abortOnDisconnect), ([pathParams, signal]) =>
+        // The error channel stays `never`: a request that cannot be materialized is a defect, not a
+        // recoverable route error, and `never` is what makes `add` runnable below.
+        Effect.flatMap(toReadableWebRequest(serverRequest, signal), webRequest =>
           Effect.map(
             Effect.promise(() => this.handleRoute(route, prefix, webRequest, pathParams as Record<string, string>)),
-            HttpServerResponse.fromWeb,
+            response => this.toEffectResponse(response),
           ),
         ),
       );
@@ -697,8 +832,12 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
 
     for (const route of routes) {
       const handler = (serverRequest: HttpServerRequest.HttpServerRequest) =>
-        Effect.flatMap(Effect.orDie(HttpServerRequest.toWeb(serverRequest)), webRequest =>
-          Effect.map(Effect.promise(() => this.handleCustomRoute(webRequest)), HttpServerResponse.fromWeb),
+        Effect.flatMap(abortOnDisconnect, signal =>
+          Effect.flatMap(toReadableWebRequest(serverRequest, signal), webRequest =>
+            Effect.map(Effect.promise(() => this.handleCustomRoute(webRequest)), response =>
+              this.toEffectResponse(response),
+            ),
+          ),
         );
 
       await Effect.runPromise(
@@ -713,19 +852,12 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
       const path = url.pathname;
       const method = request.method;
 
-      let body: unknown;
-      if (method !== 'GET' && method !== 'HEAD') {
-        const text = await request.clone().text();
-        if (text.trim().length > 0) {
-          try {
-            body = JSON.parse(text);
-          } catch {
-            body = text;
-          }
-        }
-      }
+      // Parsed from a copy, only to read fields from. The route itself gets the original body: custom
+      // routes are often webhooks that verify a signature over the exact bytes sent, and parsing and
+      // re-serialising changes them — whitespace, duplicate keys, large integers, binary data.
+      const body = await readBodyFields(request.clone());
 
-      const requestContext = await this.createContextMiddleware()(request, body);
+      const requestContext = await this.createContextMiddleware()(request, body.json);
 
       const matchedRoute = findMatchingCustomRoute(
         path,
@@ -767,6 +899,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
           ...matchedRoute?.params,
           ...Object.fromEntries(url.searchParams),
+          ...body.fields,
         });
         if (fgaError) return json({ error: fgaError.error, message: fgaError.message }, fgaError.status);
       }
@@ -782,7 +915,8 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
         request.url,
         request.method,
         headers,
-        body,
+        // The stream itself, which the base forwards byte for byte, as @mastra/hono does.
+        request.body ?? undefined,
         requestContext,
         request.signal,
       );
@@ -793,8 +927,59 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     }
   }
 
-  /** Context is built per route because Effect has no `derive`-style request hook. */
-  registerContextMiddleware(): void {}
+  /**
+   * Converts a Web response for Effect to send, keeping every `Set-Cookie`.
+   *
+   * `HttpServerResponse.fromWeb` files cookies by name, so two sharing a name — one cleared at two
+   * paths, say — collapse into the last, and one that cannot be serialised fails the response when
+   * it is sent, leaving the client waiting. Each cookie gets its own entry here instead, and one
+   * that could never be sent is dropped with a warning. Attributes Effect does not model (anything
+   * but Domain, Path, Expires, Max-Age, HttpOnly, Secure, SameSite, Priority, Partitioned) are lost.
+   */
+  private toEffectResponse(response: Response): HttpServerResponse.HttpServerResponse {
+    const setCookies = response.headers.getSetCookie();
+    const converted = HttpServerResponse.fromWeb(response);
+    if (setCookies.length === 0) return converted;
+
+    const cookies: Record<string, Cookies.Cookie> = {};
+    setCookies.forEach((header, index) => {
+      for (const cookie of Object.values(Cookies.fromSetCookie(header).cookies)) {
+        try {
+          Cookies.serializeCookie(cookie);
+          cookies[`${index}:${cookie.name}`] = cookie;
+        } catch (error) {
+          this.mastra.getLogger()?.warn('Dropped a Set-Cookie header that cannot be sent', {
+            cookie: cookie.name,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    });
+    return HttpServerResponse.replaceCookies(converted, Cookies.fromReadonlyRecord(cookies));
+  }
+
+  /**
+   * Context is built per route because Effect has no `derive`-style request hook. What does need
+   * every request, matched or not, is the warning for a channel webhook nobody registered, which
+   * shows up as a 404 no route would ever log — so it runs here, as in `@mastra/hono`.
+   */
+  registerContextMiddleware(): void {
+    Effect.runSync(
+      this.app.addGlobalMiddleware(httpEffect =>
+        Effect.flatMap(HttpServerRequest.HttpServerRequest, serverRequest =>
+          Effect.onExit(httpEffect, exit =>
+            Effect.map(statusOf(exit), status =>
+              this.warnIfUnregisteredChannelWebhook(
+                new URL(serverRequest.url, 'http://localhost').pathname,
+                serverRequest.method,
+                status,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   /** Auth is resolved per route, matching every other adapter. */
   registerAuthMiddleware(): void {}
@@ -812,35 +997,181 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
           if (!this.shouldLogRequest(url.pathname)) return httpEffect;
 
           const start = Date.now();
-          return Effect.map(httpEffect, response => {
-            const duration = Date.now() - start;
-            const level = this.httpLoggingConfig?.level || 'info';
-            const logData: Record<string, any> = {
-              method: serverRequest.method,
-              path: url.pathname,
-              status: response.status,
-              duration: `${duration}ms`,
-            };
+          // On exit rather than on success, so a request no route matched — which fails instead of
+          // producing a response — is logged with the 404 it is answered with, as in @mastra/hono.
+          return Effect.onExit(httpEffect, exit =>
+            Effect.map(statusOf(exit), status => {
+              const duration = Date.now() - start;
+              const level = this.httpLoggingConfig?.level || 'info';
+              const logData: Record<string, any> = {
+                method: serverRequest.method,
+                path: url.pathname,
+                status,
+                duration: `${duration}ms`,
+              };
 
-            if (this.httpLoggingConfig?.includeQueryParams) {
-              logData.query = Object.fromEntries(url.searchParams);
-            }
-
-            if (this.httpLoggingConfig?.includeHeaders) {
-              const headers: Record<string, unknown> = { ...serverRequest.headers };
-              for (const header of this.httpLoggingConfig.redactHeaders ?? []) {
-                if (headers[header.toLowerCase()] !== undefined) headers[header.toLowerCase()] = '[REDACTED]';
+              if (this.httpLoggingConfig?.includeQueryParams) {
+                logData.query = Object.fromEntries(url.searchParams);
               }
-              logData.headers = headers;
-            }
 
-            this.logger[level](`${serverRequest.method} ${url.pathname} ${response.status} ${duration}ms`, logData);
-            return response;
-          });
+              if (this.httpLoggingConfig?.includeHeaders) {
+                const headers: Record<string, unknown> = { ...serverRequest.headers };
+                for (const header of this.httpLoggingConfig.redactHeaders ?? []) {
+                  if (headers[header.toLowerCase()] !== undefined) headers[header.toLowerCase()] = '[REDACTED]';
+                }
+                logData.headers = headers;
+              }
+
+              this.logger[level](`${serverRequest.method} ${url.pathname} ${status} ${duration}ms`, logData);
+            }),
+          );
         }),
       ),
     );
   }
+}
+
+/**
+ * The request as a Web `Request` whose body can still be read.
+ *
+ * `HttpServerRequest.toWeb` hands over the original body. Once a middleware has read it
+ * (`request.json`, `request.text`…) that body is empty on a Node server and unusable in a fetch
+ * handler, so Mastra would see no input at all. Effect keeps what the middleware read, and the body
+ * is rebuilt from that: the bytes where Effect kept them, otherwise the text, which is what a fetch
+ * handler keeps for JSON and forms. A body nobody has read passes through untouched, still streaming.
+ */
+const toReadableWebRequest = (
+  serverRequest: HttpServerRequest.HttpServerRequest,
+  signal: AbortSignal,
+): Effect.Effect<Request> =>
+  // The signal only takes effect where Effect builds the Request (a Node server). A fetch handler
+  // passes the host's own Request through, whose signal already aborts when the client leaves.
+  Effect.flatMap(Effect.orDie(HttpServerRequest.toWeb(serverRequest, { signal })), request => {
+    // GET and HEAD carry no body, and a Request with those methods refuses one.
+    if (request.method === 'GET' || request.method === 'HEAD' || !bodyWasRead(serverRequest.source)) {
+      return Effect.succeed(request);
+    }
+    // Read some other way — the raw stream, say — nothing kept the bytes. Failing says so; passing
+    // the empty body on would surface as a baffling validation error far from the cause.
+    if (!effectKeptBody(serverRequest)) {
+      return Effect.die(
+        new Error(
+          `The body of ${request.method} ${new URL(request.url).pathname} was consumed before Mastra's route ran, ` +
+            'and not through request.text/json/arrayBuffer, so it cannot be recovered',
+        ),
+      );
+    }
+    return serverRequest.arrayBuffer.pipe(
+      Effect.map(bytes => new Uint8Array(bytes)),
+      Effect.catch(() => Effect.map(serverRequest.text, text => new TextEncoder().encode(text))),
+      Effect.orDie,
+      Effect.map(
+        body => new Request(request.url, { method: request.method, headers: request.headers, body, signal: request.signal }),
+      ),
+    );
+  });
+
+/**
+ * A signal that aborts when the request ends without its response having been sent: the client
+ * disconnected, or the server shut down first. Mastra hands it to routes as `abortSignal`, which is
+ * what stops an agent's model calls — without it they run to the end after the client has left.
+ *
+ * Tied to the request's scope, which Effect keeps open until the response body has been written,
+ * so it also covers a streamed answer the client stops reading partway.
+ */
+const abortOnDisconnect: Effect.Effect<AbortSignal, never, Scope.Scope> = Effect.suspend(() => {
+  const controller = new AbortController();
+  return Effect.as(
+    Effect.addFinalizer(exit => (Exit.isSuccess(exit) ? Effect.void : Effect.sync(() => controller.abort()))),
+    controller.signal,
+  );
+});
+
+/**
+ * The status a request is answered with, including when it failed instead of producing a response
+ * — asked of the failure the same way Effect's server asks when it answers, so a request no route
+ * matched reports its 404.
+ */
+const statusOf = (exit: Exit.Exit<HttpServerResponse.HttpServerResponse, unknown>): Effect.Effect<number> =>
+  Exit.isSuccess(exit)
+    ? Effect.succeed(exit.value.status)
+    : Effect.map(HttpServerError.causeResponse(exit.cause), ([response]) => response.status);
+
+/**
+ * The body, or `undefined` once it passes `maxSize`. Counted as it arrives, because a chunked
+ * request declares no length; reading stops at the limit instead of buffering the rest.
+ */
+async function readBytesWithin(request: Request, maxSize?: number): Promise<Uint8Array | undefined> {
+  if (maxSize === undefined) return new Uint8Array(await request.arrayBuffer());
+
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array();
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxSize) {
+      // Not awaited: this is a clone, and a clone's cancel only settles once the original is
+      // cancelled too, which never happens here.
+      void reader.cancel().catch(() => {});
+      return undefined;
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/** Whether something already read the body of a Web `Request` or a Node `IncomingMessage`. */
+const bodyWasRead = (source: unknown): boolean => {
+  if (source instanceof Request) return source.bodyUsed;
+  const stream = source as { readonly readableDidRead?: unknown } | null;
+  return stream?.readableDidRead === true;
+};
+
+/**
+ * Whether Effect kept a copy of the body when it was read.
+ *
+ * Checked before asking for that copy, because on Node, asking Effect for the bytes of a stream
+ * something else already drained waits forever. The fields are Effect's private caches, the same on
+ * the Node and the fetch implementations. Should a release rename them, this answers false and the
+ * regression tests for a body read by middleware fail — never a hang.
+ */
+const effectKeptBody = (serverRequest: HttpServerRequest.HttpServerRequest): boolean => {
+  const caches = serverRequest as unknown as { readonly arrayBufferEffect?: unknown; readonly textEffect?: unknown };
+  return caches.arrayBufferEffect !== undefined || caches.textEffect !== undefined;
+};
+
+/**
+ * The fields a custom route's permission check may read from the body, mirroring @mastra/hono: the
+ * members of a JSON object, or the entries of a form. `json` is the parsed JSON, for the request
+ * context. Anything unreadable contributes nothing — the route still receives the body and reports
+ * the problem itself.
+ */
+async function readBodyFields(request: Request): Promise<{ json?: unknown; fields: Record<string, unknown> }> {
+  const contentType = request.headers.get('content-type') ?? '';
+  try {
+    if (contentType.includes('application/json')) {
+      const parsed: unknown = await request.json();
+      const isObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+      return { json: parsed, fields: isObject ? (parsed as Record<string, unknown>) : {} };
+    }
+    if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+      return { fields: Object.fromEntries(await request.formData()) };
+    }
+  } catch {
+    // Not what the content type claims.
+  }
+  return { fields: {} };
 }
 
 /**
@@ -858,9 +1189,15 @@ export const createRouter = (config?: Partial<FindMyWay.RouterConfig>): EffectRo
     }),
   );
 
-/** Turns a populated router into a fetch-compatible handler plus its teardown. */
-export const toWebHandler = (router: EffectRouter) =>
-  HttpRouter.toWebHandler(Layer.succeed(HttpRouter.HttpRouter)(router));
+/**
+ * Turns a populated router into a fetch-compatible handler plus its teardown.
+ *
+ * Effect logs every request it answers; pass `{ disableLogger: true }` to stop that. `dispose`
+ * releases what the handler holds, not Mastra. For a tracer or other services, call
+ * `HttpRouter.toWebHandler` with your own layer merged in.
+ */
+export const toWebHandler = (router: EffectRouter, options?: { readonly disableLogger?: boolean }) =>
+  HttpRouter.toWebHandler(Layer.succeed(HttpRouter.HttpRouter)(router), options);
 
 type MastraServerOptions = ConstructorParameters<typeof MastraServer>[0];
 
