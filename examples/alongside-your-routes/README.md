@@ -33,9 +33,13 @@ request ──▶ router ───┼─ /api/*  (~400 routes) ─────�
 2. It then hands **that same router** to `new MastraServer({ app: router, … })`. Mastra does not
    bring a router of its own and is not "one route": it adds each of its routes to yours.
 3. A middleware added to the router — here, one that stamps `x-served-by: effect` on responses —
-   runs on every request, for your routes and Mastra's alike. A request that matches no route at
-   all fails instead of producing a response, so there is nothing to stamp: it gets the router's
-   plain 404.
+   runs on every request, for your routes and Mastra's alike.
+
+Some answers are not responses a route produced. A request that matches no route fails in Effect
+instead, and so does a Mastra route that fails with a server error (5xx) — that is how your Effect
+code gets to see it. A middleware that changes the response with `Effect.map` never runs for those.
+This one stamps through a pre-response handler (`HttpEffect.appendPreResponseHandler`), which runs
+on whatever answer is sent. Effect's own CORS middleware adds its headers the same way.
 
 The order routes are added in does not matter. The router picks the most specific matching path,
 not the first one registered, so your routes could just as well be added after Mastra's.
@@ -55,7 +59,7 @@ request, and since everything shares one router, that includes `/healthz` and `/
 ## What the tests check
 
 [`src/server.test.ts`](src/server.test.ts): your routes and Mastra's answer from the same router;
-the shared middleware reaches both (and what it does not reach); the custom route works; routes
+the shared middleware reaches both, and answers no route produced as well; the custom route works; routes
 added after Mastra still work; an app route at a path Mastra already uses is refused at startup
 rather than silently shadowing it; and what Mastra's request log does and does not record.
 

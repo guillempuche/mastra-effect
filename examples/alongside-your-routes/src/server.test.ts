@@ -96,14 +96,14 @@ describe('Mastra alongside your routes', () => {
       expect(response.headers.get('x-served-by')).toBe('effect');
     });
 
-    it('should not stamp a request that matches no route', async () => {
-      // GIVEN the middleware adds its header to the response a route produces
-      // WHEN a request matches no route, so it fails instead of producing a response
-      // THEN the router's plain 404 should come back without the stamp
+    it('should stamp even a request that fails instead of producing a response', async () => {
+      // GIVEN the middleware stamps through a pre-response handler, which runs on every answer sent
+      // WHEN a request matches no route, so it fails in Effect — as a Mastra server error does too
+      // THEN the router's 404 should carry the stamp all the same
       const response = await send('/nowhere');
 
       expect(response.status).toBe(404);
-      expect(response.headers.get('x-served-by')).toBeNull();
+      expect(response.headers.get('x-served-by')).toBe('effect');
     });
   });
 

@@ -14,7 +14,7 @@ import { NodeHttpServer } from '@effect/platform-node';
 import { MastraServer, createRouter, type EffectRouter } from '@guillem_puche/mastra-effect';
 import type { Mastra } from '@mastra/core';
 import { Effect, Layer } from 'effect';
-import { HttpRouter, HttpServer, HttpServerResponse } from 'effect/unstable/http';
+import { HttpEffect, HttpRouter, HttpServer, HttpServerResponse } from 'effect/unstable/http';
 
 import { createMastra } from './mastra.ts';
 
@@ -29,9 +29,20 @@ export async function buildServer(): Promise<Server> {
   const router = createRouter();
 
   // A middleware added to the router wraps every route on it: the app's and Mastra's alike.
+  //
+  // It stamps through a pre-response handler, which runs on whatever answer is sent, rather than by
+  // mapping the response a route produces. Not every answer is such a response: a request no route
+  // matches, or a Mastra route that fails with a server error, fails in Effect instead, and
+  // `Effect.map` never sees it. Effect's own CORS middleware adds its headers the same way, for the
+  // same reason.
   Effect.runSync(
     router.addGlobalMiddleware(httpEffect =>
-      Effect.map(httpEffect, response => HttpServerResponse.setHeader(response, 'x-served-by', 'effect')),
+      Effect.andThen(
+        HttpEffect.appendPreResponseHandler((_request, response) =>
+          Effect.succeed(HttpServerResponse.setHeader(response, 'x-served-by', 'effect')),
+        ),
+        httpEffect,
+      ),
     ),
   );
 
