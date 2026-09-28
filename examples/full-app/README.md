@@ -81,9 +81,9 @@ under its span, so one trace shows a request from the route down to the model ca
 
 Two things make it work, and both are easy to miss:
 
-- **The tracer provider is registered process-wide.** The bridge reads only the registered provider,
-  and Effect's `NodeSdk.layer` never registers the one it builds. Without the registration, the bridge
-  exports none of Mastra's spans and nothing fails
+- **The tracer provider is registered process-wide.** The bridge reads the registered provider, and
+  Effect's `NodeSdk.layer` never registers the one it builds. Without the registration, the bridge
+  exports none of Mastra's spans; since `@mastra/otel-bridge` 1.5.11 it logs one warning saying so
   ([mastra-ai/mastra#24950](https://github.com/mastra-ai/mastra/issues/24950)). Registering also
   installs the context manager that lets Mastra's spans nest under the request. The registration is
   undone when the server stops. OpenTelemetry refuses to register twice, so without that, a server

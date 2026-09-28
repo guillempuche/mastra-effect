@@ -254,8 +254,8 @@ importers:
         specifier: ^1.18.0
         version: 1.18.0(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       '@mastra/otel-bridge':
-        specifier: ^1.5.10
-        version: 1.5.10(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+        specifier: ^1.5.11
+        version: 1.5.11(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       '@mastra/server':
         specifier: ^1.68.0
         version: 1.69.0(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
@@ -858,8 +858,15 @@ packages:
       '@mastra/core': '>=1.16.0-0 <2.0.0-0'
       zod: ^3.25.0 || ^4.0.0
 
-  '@mastra/otel-bridge@1.5.10':
-    resolution: {integrity: sha512-g7mdV/ziMmvpHxvA4OehJj+hhCIk30VsIPYOZQxyeZCSKBMyVokGgVsVksdqiez0eMN/XqaQTNOamwkbyWEkow==}
+  '@mastra/observability@1.18.1':
+    resolution: {integrity: sha512-6D4I9LBzU7PQ9woqobc7NeLLqZcNeX2fHBJzUUclWh3a1x7RG32Ybimd9JP8oSvYhNZmfn1Rusnwq+s16JdwGQ==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@mastra/core': '>=1.16.0-0 <2.0.0-0'
+      zod: ^3.25.0 || ^4.0.0
+
+  '@mastra/otel-bridge@1.5.11':
+    resolution: {integrity: sha512-/zyduqVQbL93rSgC7PzYkN+lI6hJVeqCQUoVPifkZpkfjHaaspjJxkwx89MQrGAVRk0KmPhyw7duVPJdQbaJUw==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
       '@mastra/core': '>=1.16.0-0 <2.0.0-0'
@@ -871,8 +878,8 @@ packages:
       '@opentelemetry/sdk-node':
         optional: true
 
-  '@mastra/otel-exporter@1.4.1':
-    resolution: {integrity: sha512-rRYTUx77i9GBwdFJu6e5j9t9YYvd+Qln3qVSzaHkCuV9n4LDAxKIKh1G7ty4vbOgvpwIhrRladsp17AUIBgilg==}
+  '@mastra/otel-exporter@1.4.2':
+    resolution: {integrity: sha512-D3ODdzUD3W4fhRITK0w0Y5PeBJIX61Xuqafvd0VCabwxZn40nSgJgl8Nn/46Xh8IXJgB+qNlcqNlFeMYr8axlA==}
     engines: {node: '>=22.13.0'}
     peerDependencies:
       '@mastra/core': '>=1.16.0-0 <2.0.0-0'
@@ -4643,20 +4650,25 @@ snapshots:
       '@mastra/core': 1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       zod: 4.6.5
 
-  '@mastra/otel-bridge@1.5.10(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
+  '@mastra/observability@1.18.1(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
     dependencies:
       '@mastra/core': 1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
-      '@mastra/observability': 1.18.0(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
-      '@mastra/otel-exporter': 1.4.1(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+      zod: 4.6.5
+
+  '@mastra/otel-bridge@1.5.11(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
+    dependencies:
+      '@mastra/core': 1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
+      '@mastra/observability': 1.18.1(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+      '@mastra/otel-exporter': 1.4.2(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.221.0
     transitivePeerDependencies:
       - zod
 
-  '@mastra/otel-exporter@1.4.1(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
+  '@mastra/otel-exporter@1.4.2(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)':
     dependencies:
       '@mastra/core': 1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
-      '@mastra/observability': 1.18.0(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
+      '@mastra/observability': 1.18.1(@mastra/core@1.69.0(@grpc/grpc-js@1.14.5)(effect@4.0.0-rc.117)(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(zod@4.6.5)
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.221.0
       '@opentelemetry/core': 2.11.0(@opentelemetry/api@1.9.1)

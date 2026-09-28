@@ -189,10 +189,11 @@ export const telemetryEnabled = (): boolean => Boolean(process.env.OTEL_EXPORTER
  * and refusing to boot over a monitoring setting turns "cannot watch" into "cannot run".
  *
  * The tracer provider is registered process-wide. Effect's `NodeSdk.layer` builds one without
- * registering it, and Mastra's OpenTelemetry bridge only reads the registered one — without this,
- * the bridge exports none of Mastra's spans, with no error to say so
- * (https://github.com/mastra-ai/mastra/issues/24950). Registering also installs the context manager
- * that lets Mastra's spans nest under the request's span.
+ * registering it, and Mastra's OpenTelemetry bridge reads the registered one unless given a provider
+ * — without this, the bridge exports none of Mastra's spans. Since `@mastra/otel-bridge` 1.5.11 it
+ * at least says so, with one warning (https://github.com/mastra-ai/mastra/issues/24950). Registering
+ * also installs the context manager that lets Mastra's spans nest under the request's span, which
+ * handing the bridge the provider alone would not.
  *
  * The registration is undone when the layer is released. Otherwise the process keeps the shut-down
  * provider as its global one, and OpenTelemetry refuses a second registration, so a server started
