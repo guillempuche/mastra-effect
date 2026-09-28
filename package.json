@@ -1,6 +1,6 @@
 {
   "name": "@guillem_puche/mastra-effect",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Mastra server adapter for the Effect v4 HTTP layer",
   "type": "module",
   "main": "dist/index.js",
