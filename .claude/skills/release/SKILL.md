@@ -14,17 +14,28 @@ Two halves, on purpose:
   publishing, which attaches a provenance attestation. It refuses any ref that is not
   `v<package.json version>` on a commit in `main`.
 
+Run both from this repository's root. A shell left in another pnpm workspace runs that workspace's
+`release` instead — `git remote get-url origin` must name `guillempuche/mastra-effect`.
+
 ```bash
-GITHUB_TOKEN=$(gh auth token) pnpm release:dry   # always first
-GITHUB_TOKEN=$(gh auth token) pnpm release       # requires a clean tree on main, with an upstream
+GITHUB_TOKEN=<token> pnpm release:dry   # always first
+GITHUB_TOKEN=<token> pnpm release       # requires a clean tree on main, with an upstream
 ```
 
 `GITHUB_TOKEN` is required: `release-it` creates the GitHub release with it, and fails without one.
-`before:init` runs `pnpm typecheck && pnpm test && pnpm build`, so a release cannot be cut red.
+Use a fine-grained token limited to this repository with **Contents: read and write**, not
+`gh auth token`. The variable is visible to the whole run, and `before:init` runs
+`pnpm typecheck && pnpm test && pnpm build` — third-party code that could read a token scoped to all
+your repositories. Those gates also mean a release cannot be cut red.
+
+`ignoreRecommendedBump` is on, so both commands stop at a version prompt whose first entry is
+`patch`; choose deliberately (see 3. below). `--ci <increment>` answers it up front, and is the form
+to use where there is no terminal to answer in: `pnpm release --ci minor`.
 
 Pushing the tag does not publish yet. The Release run under **Actions** runs CI, then waits at the
 `release` environment until its reviewer opens **Review deployments** and approves it. Nothing
-reaches npm before that click.
+reaches npm before that click, provided the environment does not let administrators bypass its
+rules (see the first-publish setup below).
 
 ## Decide these before bumping
 
@@ -86,8 +97,10 @@ settings that only the owner can make. In order:
    is refused. These fields cannot be edited afterwards. Then, in the package settings, require
    two-factor authentication and disallow tokens, so only the workflow can publish.
 3. **In the GitHub repository settings, create the `release` environment** with yourself as a
-   required reviewer, and limit its deployments to tags matching `v*`. Until it exists, GitHub creates
-   it on first use with no protection, and a pushed tag publishes with nobody approving it.
+   required reviewer, limit its deployments to tags matching `v*`, and untick **Allow administrators
+   to bypass configured protection rules** — left on, an administrator's account can publish without
+   the review. Until the environment exists, GitHub creates it on first use with no protection, and a
+   pushed tag publishes with nobody approving it.
 4. **Make CI a required check on `main`** (branch protection or a ruleset), so a red change cannot be
    merged in the first place.
 
@@ -111,6 +124,5 @@ especially — so an immediate `npm view` may answer 404 for a publish that work
 The changelog is generated from commit types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`,
 `cicd`. `chore` is left out of that list, which keeps it out of the changelog and is why release
 commits are `chore(release)`. Listing it with `hidden: true` does not work: the commits still
-appear, in an untitled list. A release with nothing
-but `chore` commits produces an empty changelog section — usually a sign the release is not worth
-cutting.
+appear, in an untitled list. A release with nothing but `chore` commits produces an empty changelog
+section — usually a sign the release is not worth cutting.
