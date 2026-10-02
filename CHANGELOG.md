@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.2.0](https://github.com/guillempuche/mastra-effect/compare/v0.1.0...v0.2.0) (2026-10-02)
+
+### ⚠ BREAKING CHANGES
+
+* require the stable Effect 4.0.0
+
+### Features
+
+* require the stable Effect 4.0.0 ([2bf3bc5](https://github.com/guillempuche/mastra-effect/commit/2bf3bc58dc5e42aa54b021c46a66b9d1718e8cd6))
+
 ## 0.1.0 (2026-09-28)
 
 ### Features
