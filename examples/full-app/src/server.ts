@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { MastraServer, createRouter, type EffectRouter } from '@guillem_puche/mastra-effect';
 import { NodeHttpServer } from '@effect/platform-node';
 import { Effect, Layer } from 'effect';
-import { HttpEffect, HttpServer, HttpServerResponse } from 'effect/unstable/http';
+import { HttpEffect, HttpServer, HttpServerResponse } from 'effect/http';
 
 import { createAuth } from './auth.ts';
 import { createMastra } from './mastra.ts';

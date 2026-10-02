@@ -3,7 +3,7 @@
  * differently at the same segment (`/stored/agents/:agentId/versions` vs
  * `/stored/agents/:storedAgentId`, and the same for mcp-clients, prompt-blocks, scorers).
  *
- * Stock find-my-way throws on these. rc.117 vendors its own FindMyWay, so the behavior has
+ * Stock find-my-way throws on these. Effect vendors its own FindMyWay, so the behavior has
  * to be measured, not assumed: whether registration is accepted matters far less than whether
  * dispatch delivers the *correct param name* to each route. A silent overwrite would hand
  * Mastra's handler `agentId` where it expects `storedAgentId`.
@@ -12,7 +12,7 @@
  * (server-adapters/elysia/src/index.ts:33-56).
  */
 import { Effect, Layer } from 'effect';
-import { HttpRouter, HttpServerResponse } from 'effect/unstable/http';
+import { HttpRouter, HttpServerResponse } from 'effect/http';
 import { describe, expect, it } from 'vitest';
 
 /** Echoes back whatever path params the router bound, so we can see the names. */
@@ -29,7 +29,7 @@ async function buildRouter(paths: ReadonlyArray<string>) {
   return HttpRouter.toWebHandler(Layer.succeed(HttpRouter.HttpRouter)(router));
 }
 
-describe('rc.117 router: differing param names at the same segment', () => {
+describe('Effect router: differing param names at the same segment', () => {
   it('accepts both registrations without throwing', async () => {
     await expect(
       buildRouter(['/stored/agents/:agentId/versions', '/stored/agents/:storedAgentId']),

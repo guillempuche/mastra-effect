@@ -2,7 +2,7 @@ import { toWebHandler, type EffectRouter } from '@guillem_puche/mastra-effect';
 import type { Mastra } from '@mastra/core';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { Effect } from 'effect';
-import { HttpServerResponse } from 'effect/unstable/http';
+import { HttpServerResponse } from 'effect/http';
 import { beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import { buildServer } from './server.ts';

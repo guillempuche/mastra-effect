@@ -60,14 +60,13 @@ fiber. Three things cross back into Effect:
 ## Install
 
 ```bash
-pnpm add @guillem_puche/mastra-effect effect@rc @mastra/core zod
+pnpm add @guillem_puche/mastra-effect effect @mastra/core zod
 ```
 
-`effect@rc` matters: `effect@latest` is still v3, which has no `effect/unstable/http`, and the
-install will succeed and then fail at runtime. Requires Node >= 22.13, `effect@>=4.0.0-rc.117` and
-`@mastra/core@>=1.68.0`.
+Requires Node >= 22.13, `effect@^4.0.0` and `@mastra/core@>=1.68.0`. Effect 3 does not work: it has
+no `effect/http`.
 
-To let Effect own the server, as below, add `@effect/platform-node` at the same `rc` version.
+To let Effect own the server, as below, add `@effect/platform-node` at the same version as `effect`.
 
 ## Quick start
 
@@ -77,7 +76,7 @@ import { createServer } from 'node:http';
 import { NodeHttpServer } from '@effect/platform-node';
 import { createMastraServer } from '@guillem_puche/mastra-effect';
 import { Effect, Layer } from 'effect';
-import { HttpServer } from 'effect/unstable/http';
+import { HttpServer } from 'effect/http';
 
 import { mastra } from './mastra';
 
@@ -98,7 +97,7 @@ and hand the same instance to the adapter:
 ```ts
 import { MastraServer, createRouter } from '@guillem_puche/mastra-effect';
 import { Effect } from 'effect';
-import { HttpServerResponse } from 'effect/unstable/http';
+import { HttpServerResponse } from 'effect/http';
 
 const router = createRouter();
 
@@ -199,12 +198,12 @@ to end.
 
 ## Effect version support
 
-Tracks the `rc` line, not the frozen `beta` line. Every API this adapter depends on is asserted at
-compile time in `src/effect-api-gate.ts`, so an incompatible Effect upgrade fails `tsc` instead of
+Supports Effect 4, from 4.0.0. Effect still marks its HTTP modules `@stability unstable`, which
+allows breaking changes in a minor release, so every API this adapter depends on is asserted at
+compile time in `src/effect-api-gate.ts`: an incompatible Effect upgrade fails `tsc` instead of
 failing subtly at runtime.
 
-Two behaviours differ from what you might expect coming from the Effect beta or from stock
-`find-my-way`:
+Two behaviours differ from what you might expect coming from stock `find-my-way`:
 
 - Effect vendors its own FindMyWay, which defaults `ignoreDuplicateSlashes` to **true**. This adapter
   forces it off, so `/api//agents` 404s instead of being served as `/api/agents`.

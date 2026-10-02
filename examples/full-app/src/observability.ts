@@ -16,7 +16,7 @@ import { BatchSpanProcessor, type SpanExporter } from '@opentelemetry/sdk-trace-
 import type { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import type { EffectRouter } from '@guillem_puche/mastra-effect';
 import { Effect, Exit, Layer } from 'effect';
-import { HttpServerError, HttpServerRequest, type HttpServerResponse } from 'effect/unstable/http';
+import { HttpServerError, HttpServerRequest, type HttpServerResponse } from 'effect/http';
 
 /**
  * Observability for this example, following docs/observability.md in the batuda repo.

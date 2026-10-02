@@ -11,7 +11,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import { Effect, Layer, ManagedRuntime } from 'effect';
-import { HttpServer } from 'effect/unstable/http';
+import { HttpServer } from 'effect/http';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

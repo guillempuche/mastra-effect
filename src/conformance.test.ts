@@ -15,7 +15,7 @@ import {
   createRouteAdapterTestSuite,
 } from '@mastra/server-adapters-test-suite';
 import { Effect } from 'effect';
-import { HttpServerRequest, HttpServerResponse } from 'effect/unstable/http';
+import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 
 import { MastraServer, createRouter, toWebHandler, type EffectRouter } from './index';
 import { onNodeServer } from './test-support';

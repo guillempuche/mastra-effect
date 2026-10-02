@@ -11,7 +11,7 @@ import { SimpleAuth, registerApiRoute } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Effect, Stream } from 'effect';
-import { HttpServerRequest } from 'effect/unstable/http';
+import { HttpServerRequest } from 'effect/http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 

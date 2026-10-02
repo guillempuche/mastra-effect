@@ -14,7 +14,7 @@ import {
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, type Tracer } from 'effect';
-import type { FindMyWay } from 'effect/unstable/http';
+import type { FindMyWay } from 'effect/http';
 import {
   Cookies,
   HttpRouter,
@@ -22,7 +22,7 @@ import {
   HttpServerRequest,
   HttpServerRespondable,
   HttpServerResponse,
-} from 'effect/unstable/http';
+} from 'effect/http';
 import { toFetchResponse, toReqRes } from 'fetch-to-node';
 
 export type EffectRouter = HttpRouter.HttpRouter;
@@ -52,7 +52,7 @@ type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** Methods whose JSON body may carry a `requestContext` envelope. */
 const CONTEXT_BODY_METHODS = new Set(['POST', 'PUT', 'PATCH']);
-/** What `effect/unstable/http`'s `HttpRouter.add` accepts, besides the `*` wildcard. */
+/** What `effect/http`'s `HttpRouter.add` accepts, besides the `*` wildcard. */
 const EFFECT_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'QUERY']);
 
 let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -239,7 +239,7 @@ function effectMethod(method: string, path: string): 'GET' | 'POST' | 'PUT' | 'P
   if (!EFFECT_METHODS.has(upper)) {
     throw new Error(
       `[@guillem_puche/mastra-effect] Unsupported HTTP method "${method}" for route ${path}. ` +
-        `effect/unstable/http accepts ${[...EFFECT_METHODS].join(', ')} or ALL.`,
+        `effect/http accepts ${[...EFFECT_METHODS].join(', ')} or ALL.`,
     );
   }
   return upper as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
@@ -884,7 +884,7 @@ export class MastraServer extends MastraServerBase<EffectRouter, EffectRequestCo
     const prefix = prefixParam ?? this.prefix ?? '';
     const fullPath = `${prefix}${route.path}`;
 
-    // rc.117's vendored FindMyWay binds the correct param name per route even when two routes
+    // Effect's vendored FindMyWay binds the correct param name per route even when two routes
     // differ only in their param name at the same segment, so paths register verbatim — no
     // positional rewrite is needed here (see src/router-collision.test.ts).
     const handler = this.toEffectHandler((request, pathParams, span) =>
