@@ -7,10 +7,10 @@
 # while keeping their changes staged. The commit you make from them must carry the two trailer lines
 # printed at the end: they are how the next `git subtree pull` finds where the last one left off.
 #
-# Usage: scripts/update-vendored-effect.sh 4.0.0-rc.118
+# Usage: scripts/update-vendored-effect.sh 4.0.1
 set -euo pipefail
 
-version="${1:?usage: scripts/update-vendored-effect.sh <effect version>, e.g. 4.0.0-rc.118}"
+version="${1:?usage: scripts/update-vendored-effect.sh <effect version>, e.g. 4.0.1}"
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "Commit or stash your changes first: this needs a clean working tree." >&2

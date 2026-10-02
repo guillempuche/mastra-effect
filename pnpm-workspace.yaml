@@ -37,8 +37,8 @@ allowBuilds:
 # release is typically caught and unpublished within hours, so the delay is the
 # window that catches it.
 #
-# The cost is real here: this repo tracks `rc` and `alpha` dist-tags, so the very
-# newest upstream build is briefly unavailable. That is the intended trade.
+# The cost is real here: a new Effect release cannot be installed for its first
+# day. That is the intended trade.
 # Renovate is configured with a longer window still, so it never opens a PR for a
 # version pnpm would then refuse to install.
 minimumReleaseAge: 1440
