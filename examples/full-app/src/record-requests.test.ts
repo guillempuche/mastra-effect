@@ -1,6 +1,6 @@
 import { createRouter } from '@guillem_puche/mastra-effect';
 import { Effect, Layer, Logger, References } from 'effect';
-import { HttpRouter, HttpServerResponse } from 'effect/unstable/http';
+import { HttpRouter, HttpServerResponse } from 'effect/http';
 import { describe, expect, it } from 'vitest';
 
 import { recordRequests } from './observability.ts';

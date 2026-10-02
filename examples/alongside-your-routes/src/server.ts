@@ -14,7 +14,7 @@ import { NodeHttpServer } from '@effect/platform-node';
 import { MastraServer, createRouter, type EffectRouter } from '@guillem_puche/mastra-effect';
 import type { Mastra } from '@mastra/core';
 import { Effect, Layer } from 'effect';
-import { HttpEffect, HttpRouter, HttpServer, HttpServerResponse } from 'effect/unstable/http';
+import { HttpEffect, HttpRouter, HttpServer, HttpServerResponse } from 'effect/http';
 
 import { createMastra } from './mastra.ts';
 

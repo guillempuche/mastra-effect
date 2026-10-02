@@ -7,7 +7,7 @@ import { createServer as createNetServer } from 'node:net';
 
 import { NodeHttpServer } from '@effect/platform-node';
 import { Effect, Layer, ManagedRuntime } from 'effect';
-import { HttpServer } from 'effect/unstable/http';
+import { HttpServer } from 'effect/http';
 
 import { toWebHandler, type EffectRouter } from './index';
 

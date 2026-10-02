@@ -12,10 +12,10 @@
     "pretypecheck": "pnpm --filter @guillem_puche/mastra-effect build"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-rc.117",
+    "@effect/platform-node": "4.0.0",
     "@guillem_puche/mastra-effect": "workspace:*",
     "@mastra/core": "^1.68.0",
-    "effect": "4.0.0-rc.117",
+    "effect": "4.0.0",
     "zod": "^4.6.4"
   },
   "devDependencies": {

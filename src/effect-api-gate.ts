@@ -1,11 +1,11 @@
 /**
- * Compile-time contract against `effect/unstable/http`. Not part of the public entry —
+ * Compile-time contract against `effect/http`. Not part of the public entry —
  * it exists so that an Effect upgrade fails `tsc` here rather than somewhere subtle at runtime.
  *
- * Pinned at effect@4.0.0-rc.117.
+ * Pinned at effect@4.0.0.
  */
 import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, Stream, type Tracer } from 'effect';
-import { Sse } from 'effect/unstable/encoding';
+import { Sse } from 'effect/encoding';
 import {
   Cookies,
   HttpRouter,
@@ -13,7 +13,7 @@ import {
   HttpServerRequest,
   HttpServerRespondable,
   HttpServerResponse,
-} from 'effect/unstable/http';
+} from 'effect/http';
 
 // A live, imperatively-mutable router instance. This is what `TApp` binds to: Mastra's
 // `registerRoutes()` awaits ~400 sequential `registerRoute` calls against one fixed app,
@@ -42,7 +42,7 @@ export const streamResponse = (body: ReadableStream<Uint8Array>): HttpServerResp
     headers: { 'content-type': 'text/event-stream' },
   });
 
-// SSE framing is still under unstable/encoding at rc.117.
+// SSE framing lives in effect/encoding, not effect/http.
 export const sseEncoder = (): unknown => Sse.encoder;
 
 // Path params and query params, read from inside a handler.

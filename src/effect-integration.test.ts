@@ -12,7 +12,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createRoute } from '@mastra/server/server-adapter';
 import { Context, Effect, Exit, Layer, ManagedRuntime, Option, Tracer } from 'effect';
-import { HttpRouter } from 'effect/unstable/http';
+import { HttpRouter } from 'effect/http';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
