@@ -10,10 +10,9 @@
   "prConcurrentLimit": 3,
   "description": [
     "minimumReleaseAge is longer than pnpm's own floor, so Renovate never opens a PR for a version pnpm would then refuse to resolve. It is also the window in which a compromised release is usually caught.",
-    "ignoreUnstable is off because effect tracks the rc dist-tag on purpose. Mastra is followed on its stable line, and tested on both the newest release and the oldest one package.json declares (the CI job 'Oldest supported Mastra')."
+    "Mastra is followed on its stable line, and tested on both the newest release and the oldest one package.json declares (the CI job 'Oldest supported Mastra')."
   ],
   "minimumReleaseAge": "3 days",
-  "ignoreUnstable": false,
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -47,13 +46,12 @@
       "allowedVersions": "<2.0.0"
     },
     {
-      "description": "Effect and its companion packages are released together on the rc line and must stay on one version; @effect/platform-node at a different rc than effect is an instant type mismatch. Bumping effect also needs scripts/update-vendored-effect.sh, which no bot can run and CI asserts.",
+      "description": "Effect and its companion packages are released together and must stay on one version; @effect/platform-node at a different version than effect is an instant type mismatch. Bumping effect also needs scripts/update-vendored-effect.sh, which no bot can run and CI asserts.",
       "matchPackageNames": [
         "effect",
         "@effect/**"
       ],
       "groupName": "effect",
-      "followTag": "rc",
       "rangeStrategy": "pin"
     },
     {

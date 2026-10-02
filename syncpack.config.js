@@ -10,7 +10,7 @@ export default {
       // A peer range states what a consumer may bring; an install pin states
       // what this repo tests against. They are deliberately different: the peer
       // on `effect` is a wide compatibility window, while the devDependency is
-      // one exact rc. Forcing them to match would either publish a hostile exact
+      // one exact version. Forcing them to match would either publish a hostile exact
       // peer or stop pinning what CI actually runs.
       label: 'Peer ranges, which are broader than install pins on purpose',
       dependencies: ['**'],
@@ -25,8 +25,8 @@ export default {
       isIgnored: true,
     },
     {
-      // Effect and its companion packages are released together on the rc line.
-      // @effect/platform-node at a different rc than effect is an immediate type
+      // Effect and its companion packages are released together.
+      // @effect/platform-node at a different version than effect is an immediate type
       // mismatch, and the example imports both.
       label: 'Effect, which must be one version everywhere',
       dependencies: ['effect', '@effect/**'],
