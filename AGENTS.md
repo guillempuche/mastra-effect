@@ -29,7 +29,7 @@ pnpm lint          # oxlint
 ## Layout
 
 - `src/index.ts` — the adapter. Everything ships from here.
-- `src/effect-api-gate.ts` — compile-time assertions against `effect/unstable/http`. Not reachable
+- `src/effect-api-gate.ts` — compile-time assertions against `effect/http`. Not reachable
   from the entry, so it never reaches the bundle. If an Effect upgrade breaks the adapter, this
   should be what fails first.
 - `src/router-collision.test.ts` — records how Effect's router resolves Mastra's four
@@ -47,12 +47,12 @@ pnpm lint          # oxlint
   example covers what is listed once, in the README's Examples table; read that rather than
   opening examples at random.
 - `docs/repos/effect` — Effect source vendored as a squashed `git subtree`, pinned to the tag the
-  adapter compiles against. Read it instead of guessing at `unstable/http` internals.
+  adapter compiles against. Read it instead of guessing at `effect/http` internals.
 
 Update the vendored source with the script, never with `git subtree pull` on its own:
 
 ```bash
-scripts/update-vendored-effect.sh 4.0.0-rc.118   # the Effect version, without the `effect@` prefix
+scripts/update-vendored-effect.sh 4.0.1         # the Effect version, without the `effect@` prefix
 ```
 
 `git subtree pull --squash` makes a merge commit, and `main` requires linear history, so that commit

@@ -51,7 +51,7 @@ satisfies the range, so pnpm resolves the prerelease silently.
 
 **2. Has the Effect line moved?**
 
-`peerDependencies` says `effect >=4.0.0-rc.117 <5`. If Effect has released past the pinned rc, bump
+`peerDependencies` says `effect ^4.0.0`. If Effect has released past the pinned version, bump
 it, then update the vendored subtree to match — `pnpm lint-vendor` fails until you do — and check
 `src/effect-api-gate.ts` still compiles:
 
