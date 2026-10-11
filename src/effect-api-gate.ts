@@ -2,7 +2,7 @@
  * Compile-time contract against `effect/http`. Not part of the public entry —
  * it exists so that an Effect upgrade fails `tsc` here rather than somewhere subtle at runtime.
  *
- * Pinned at effect@4.0.0.
+ * Pinned at effect@4.0.2.
  */
 import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, Stream, type Tracer } from 'effect';
 import { Sse } from 'effect/encoding';
