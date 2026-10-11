@@ -236,9 +236,9 @@ export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
  * step.
  *
  * That code's spans are made by the runtime's tracer, not the server's. This one sends them through
- * the provider `telemetryLayer` registers, so they are exported in the request's trace, under its
- * span. Without it the runtime makes them with Effect's default tracer, which exports nothing. With
- * telemetry off, the registered provider is OpenTelemetry's no-op one, and so is this.
+ * the provider `telemetryLayer` registers, so they are exported in the request's trace, inside the
+ * span of the tool call or step that ran them. Without it the runtime makes them with Effect's
+ * default tracer, which exports nothing. With telemetry off, the registered provider is OpenTelemetry's no-op one, and so is this.
  *
  * ```ts
  * const runtime = ManagedRuntime.make(Layer.mergeAll(AppServicesLive, runtimeTracing('my-app')));
