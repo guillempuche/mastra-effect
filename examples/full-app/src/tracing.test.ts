@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { SpanKind, trace } from '@opentelemetry/api';
 import { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import { Effect, Layer, ManagedRuntime } from 'effect';
@@ -89,7 +90,7 @@ describe('tracing an agent call', () => {
     const { status, finished } = await callAgent();
 
     // THEN the agent's span should be a child of the request's span, sharing its trace
-    const request = finished.find(span => span.name.startsWith('http.server'));
+    const request = finished.find(span => span.kind === SpanKind.SERVER);
     const agentRun = finished.find(span => span.name.startsWith('invoke_agent'));
     expect(status).toBe(200);
     expect(request).toBeDefined();
@@ -108,7 +109,7 @@ describe('tracing an agent call', () => {
     const { finished } = await callAgent();
 
     // THEN Mastra's spans should be exported through the new server's provider, not lost to the old one
-    const request = finished.find(span => span.name.startsWith('http.server'));
+    const request = finished.find(span => span.kind === SpanKind.SERVER);
     const agentRun = finished.find(span => span.name.startsWith('invoke_agent'));
     expect(agentRun).toBeDefined();
     expect(agentRun?.parentSpanContext?.spanId).toBe(request?.spanContext().spanId);
@@ -137,11 +138,41 @@ describe('tracing Effect code a workflow step runs', () => {
     await runtime.dispose();
 
     // THEN the step's own span should be exported, as a child of the request's span
-    const request = finished.find(span => span.name.startsWith('http.server'));
+    const request = finished.find(span => span.kind === SpanKind.SERVER);
     const stepSpan = finished.find(span => span.name === 'lookup.effect');
     expect(response.status).toBe(200);
     expect(stepSpan).toBeDefined();
     expect(stepSpan?.spanContext().traceId).toBe(request?.spanContext().traceId);
     expect(stepSpan?.parentSpanContext?.spanId).toBe(request?.spanContext().spanId);
+  });
+});
+
+describe('tracing Effect code run inside an OpenTelemetry span', () => {
+  it("should join that span's trace without being given a parent", async () => {
+    // GIVEN the app's telemetry layer, registering its provider and context manager
+    const spans = recordingExporter();
+    const telemetry = ManagedRuntime.make(
+      telemetryLayer({ serviceName: 'tracing-test', exporters: { spans: spans.exporter, logs: new InMemoryLogRecordExporter() } }),
+    );
+    await telemetry.runPromise(Effect.void);
+    const runtime = ManagedRuntime.make(runtimeTracing('tracing-test'));
+
+    // WHEN plain code inside an active OpenTelemetry span runs an Effect span, with no Effect parent
+    // Disposed even on failure: the telemetry layer registers its provider process-wide.
+    const outer = await trace
+      .getTracer('plain')
+      .startActiveSpan('otel.outer', async span => {
+        await runtime.runPromise(Effect.withSpan(Effect.void, 'effect.child'));
+        span.end();
+        return span;
+      })
+      .finally(() => runtime.dispose().then(() => telemetry.dispose()));
+
+    // THEN the Effect span should be a child of the active span, in its trace, not the root of a new one
+    // (fixed in effect 4.0.2: https://github.com/Effect-TS/effect/issues/8489)
+    const child = spans.finished.find(span => span.name === 'effect.child');
+    expect(child).toBeDefined();
+    expect(child?.spanContext().traceId).toBe(outer.spanContext().traceId);
+    expect(child?.parentSpanContext?.spanId).toBe(outer.spanContext().spanId);
   });
 });

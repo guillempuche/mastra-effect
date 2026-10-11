@@ -1365,10 +1365,10 @@ export function runInRequest<A, E, R>(
   context: { readonly requestContext?: RequestContext; readonly abortSignal?: AbortSignal } = {},
 ): Promise<A> {
   const span = requestSpan(context.requestContext);
-  // The parent is set explicitly. With @effect/opentelemetry and a context manager, an Effect span
-  // started here should join the active OpenTelemetry span by itself, but it starts a new trace
-  // instead: https://github.com/Effect-TS/effect/issues/8489. Once fixed, this still matters for apps
-  // without a context manager, so it stays.
+  // The parent is set explicitly: without an OpenTelemetry context manager, or on effect 4.0.0 and
+  // 4.0.1 (https://github.com/Effect-TS/effect/issues/8489), nothing else links these spans to the
+  // request. It also overrides the active span, so with Mastra's OpenTelemetry bridge on, these spans
+  // sit under the request's span, beside the tool's or step's span rather than inside it.
   return runtime.runPromise(span ? Effect.withParentSpan(effect, span) : effect, { signal: context.abortSignal });
 }
 

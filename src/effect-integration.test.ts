@@ -158,7 +158,7 @@ describe('a Mastra route that fails with a server error', () => {
     // THEN the request's span should end as a failure, so tracing backends count it. It ends a moment
     // after the client has the answer, so this waits for it rather than guessing how long that takes.
     await vi.waitFor(() => {
-      const status = tracer.spans.find(span => span.name.startsWith('http.server'))?.status;
+      const status = tracer.spans.find(span => span.kind === 'server')?.status;
       expect(status !== undefined && 'exit' in status && Exit.isFailure(status.exit)).toBe(true);
     });
   });
@@ -236,7 +236,7 @@ describe('runInRequest, from a workflow step', () => {
     const run = (await response.json()) as { result?: { greeting: string; parentSpanId: string | null } };
 
     // THEN the step's Effect should have had the service, and run under the request's span
-    const serverSpan = tracer.spans.find(span => span.name.startsWith('http.server'));
+    const serverSpan = tracer.spans.find(span => span.kind === 'server');
     expect(run.result?.greeting).toBe('Hello from Effect, Ada!');
     expect(serverSpan).toBeDefined();
     expect(run.result?.parentSpanId).toBe(serverSpan?.spanId);
@@ -256,7 +256,7 @@ describe('runInRequest, from a workflow step', () => {
     await traced.dispose();
 
     // THEN the span the step's Effect created should be recorded, as a child of the request's span
-    const serverSpan = tracer.spans.find(span => span.name.startsWith('http.server'));
+    const serverSpan = tracer.spans.find(span => span.kind === 'server');
     const stepSpan = tracer.spans.find(span => span.name === 'greet.compose');
     expect(serverSpan).toBeDefined();
     expect(stepSpan).toBeDefined();
