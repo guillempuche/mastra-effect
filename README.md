@@ -31,9 +31,9 @@ fiber. Three things cross back into Effect:
   Like any failed Effect request, these skip middleware that changes the response with `Effect.map`.
   To touch every answer, use a pre-response handler, as Effect's CORS middleware does —
   [`alongside-your-routes`](examples/alongside-your-routes) shows one.
-- **Your services and the request's span, inside tools and steps.** `runInRequest` runs Effect code
-  from a tool or step through your own runtime, with the HTTP request's span as its parent, and
-  interrupts it when Mastra's abort signal fires:
+- **Your services and the request's trace, inside tools and steps.** `runInRequest` runs Effect code
+  from a tool or step through your own runtime, in the HTTP request's trace, and interrupts it when
+  Mastra's abort signal fires:
 
   ```ts
   const runtime = ManagedRuntime.make(AppServicesLive);
@@ -49,7 +49,8 @@ fiber. Three things cross back into Effect:
   to the run and fires only when the run is cancelled. The spans that code creates are made by the
   runtime's own tracer, so give the runtime your tracer as well, or they are never exported. With
   OpenTelemetry, `runtimeTracing` in [`examples/full-app`](examples/full-app/src/observability.ts)
-  does this.
+  does this. Their parent is the span of the tool call or step that ran them when Mastra's
+  OpenTelemetry bridge is on, and the request's span otherwise.
 
 - **Mastra's own spans.** With Mastra's OpenTelemetry bridge, agent runs, model calls with token
   counts and tool calls land in the same trace as the HTTP request, under its span.
@@ -156,7 +157,7 @@ shows it and compares the two.
 | `createRouter(config?)` | An empty `HttpRouter` to hand to `new MastraServer({ app })`. Takes a partial `FindMyWay.RouterConfig` |
 | `MastraServer` | The adapter itself, for when you own the router and the lifecycle |
 | `toWebHandler(router, options?)` | `{ handler, dispose }` — a fetch handler over a populated router. `options.disableLogger` stops Effect logging each request |
-| `runInRequest(runtime, effect, context)` | Runs Effect code from a Mastra tool or workflow step: your runtime's services, the request's span as parent, Mastra's abort signal |
+| `runInRequest(runtime, effect, context)` | Runs Effect code from a Mastra tool or workflow step: your runtime's services, the request's trace (under the tool's or step's span with Mastra's OpenTelemetry bridge), Mastra's abort signal |
 | `requestSpan(requestContext)` | The HTTP request's Effect span, from a tool's or step's request context; `undefined` without a tracer |
 | `MastraRouteError` | What a route's server error (5xx) becomes in Effect's error channel. Answers with Mastra's own response |
 | `EffectRouter`, `EffectRequestContext`, `MastraServerOptions`, `CreateMastraServerOptions`, `ToolsInput` | Types |

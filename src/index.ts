@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import type { TracingContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
@@ -13,7 +14,7 @@ import {
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
-import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, type Tracer } from 'effect';
+import { Data, Effect, Exit, Layer, type ManagedRuntime, Option, type Scope, Tracer } from 'effect';
 import type { FindMyWay } from 'effect/http';
 import {
   Cookies,
@@ -1343,9 +1344,9 @@ export function requestSpan(requestContext: RequestContext | undefined): Tracer.
  * Runs an Effect from inside a Mastra tool or workflow step.
  *
  * Mastra runs tools and steps as plain promises, outside the Effect request that triggered them.
- * This gives the Effect the services `runtime` provides, makes the HTTP request's span its parent,
+ * This gives the Effect the services `runtime` provides, puts its spans in the HTTP request's trace,
  * and interrupts it when Mastra's abort signal fires. Pass the context Mastra hands the tool or
- * step — it carries both the request context and that signal:
+ * step — it carries the request context, Mastra's span for the tool or step, and that signal:
  *
  * ```ts
  * execute: (input, context) => runInRequest(runtime, Users.find(input.id), context)
@@ -1358,18 +1359,48 @@ export function requestSpan(requestContext: RequestContext | undefined): Tracer.
  *   request that started it is abandoned.
  * - The spans the Effect creates are made by `runtime`'s tracer. Give the runtime the app's tracer
  *   as well, or they have the right parent but are never exported.
+ *
+ * Their parent is Mastra's span for the tool or step when Mastra's OpenTelemetry bridge opened it in
+ * the request's trace, so the Effect's work shows up inside the tool call or step that did it.
+ * Otherwise it is the request's span.
  */
 export function runInRequest<A, E, R>(
   runtime: ManagedRuntime.ManagedRuntime<R, never>,
   effect: Effect.Effect<A, E, R>,
-  context: { readonly requestContext?: RequestContext; readonly abortSignal?: AbortSignal } = {},
+  context: {
+    readonly requestContext?: RequestContext;
+    readonly tracingContext?: TracingContext;
+    readonly abortSignal?: AbortSignal;
+  } = {},
 ): Promise<A> {
-  const span = requestSpan(context.requestContext);
   // The parent is set explicitly: without an OpenTelemetry context manager, or on effect 4.0.0 and
   // 4.0.1 (https://github.com/Effect-TS/effect/issues/8489), nothing else links these spans to the
-  // request. It also overrides the active span, so with Mastra's OpenTelemetry bridge on, these spans
-  // sit under the request's span, beside the tool's or step's span rather than inside it.
-  return runtime.runPromise(span ? Effect.withParentSpan(effect, span) : effect, { signal: context.abortSignal });
+  // request.
+  const parent = parentSpan(requestSpan(context.requestContext), context.tracingContext);
+  return runtime.runPromise(parent ? Effect.withParentSpan(effect, parent) : effect, { signal: context.abortSignal });
+}
+
+/**
+ * The span Effect code run from a tool or step belongs under: Mastra's span for that tool or step
+ * when it is an OpenTelemetry span in the request's trace, otherwise the request's own span.
+ *
+ * Mastra's span qualifies only when OpenTelemetry's bridge opened it, since only then are its ids an
+ * OpenTelemetry span's; Mastra's own ids, or another tracing system's, name nothing there. It must
+ * also share the request's trace — without a context manager the bridge starts a trace of its own,
+ * and the Effect's spans would leave the request's. Within that trace, the request's span already
+ * carries the decision whether to keep the trace, made once when it started, so the parent takes it
+ * from there: anything else would export spans from a trace that was dropped.
+ */
+function parentSpan(request: Tracer.AnySpan | undefined, tracing: TracingContext | undefined): Tracer.AnySpan | undefined {
+  const mastra = tracing?.currentSpan;
+  if (!request || !mastra?.isValid) return request;
+  // Read defensively: a context built by hand, as a test calling a tool directly does, may carry a
+  // span without the rest, and choosing a parent must never fail the work it describes.
+  if (mastra.observabilityInstance?.getBridge?.()?.name !== 'otel' || mastra.traceId !== request.traceId) return request;
+  // A span left out of export (internal, or of an excluded type) is stood in for by the nearest
+  // ancestor that is exported; with none, there is nothing in the trace to hang under.
+  const spanId = mastra.getExportedSpanId ? mastra.getExportedSpanId() : mastra.id;
+  return spanId ? Tracer.externalSpan({ spanId, traceId: mastra.traceId, sampled: request.sampled }) : request;
 }
 
 /**

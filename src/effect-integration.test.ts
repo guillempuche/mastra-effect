@@ -3,10 +3,13 @@
  *
  * Mastra runs routes, tools and workflow steps as plain promises, outside the Effect request that
  * triggered them. Two things cross back: a route's server error, as a `MastraRouteError` in Effect's
- * error channel, and the request's span, which `runInRequest` hands to Effect code a tool or step
- * runs — together with the services of the app's own runtime, whose tracer makes that code's spans.
+ * error channel, and the request's trace, which `runInRequest` hands to Effect code a tool or step
+ * runs — under the request's span, or the tool's or step's own when Mastra's OpenTelemetry bridge
+ * opened it — together with the services of the app's own runtime, whose tracer makes that code's
+ * spans.
  */
 import { Mastra } from '@mastra/core';
+import type { AnySpan } from '@mastra/core/observability';
 import { registerApiRoute } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -178,10 +181,10 @@ describe('a Mastra route that fails with a server error', () => {
 
 class Greeter extends Context.Service<Greeter, { readonly greet: (name: string) => string }>()('Greeter') {}
 
-const startGreeting = () =>
+const startGreeting = (headers: Record<string, string> = {}) =>
   new Request('http://localhost/api/workflows/greet/start-async', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify({ inputData: { name: 'Ada' } }),
   });
 
@@ -279,5 +282,151 @@ describe('runInRequest, from a workflow step', () => {
     // GIVEN code outside any HTTP request, such as a script calling a tool directly
     // THEN there is simply no span, rather than an error
     expect(requestSpan(undefined)).toBeUndefined();
+  });
+});
+
+describe("runInRequest, under the span of the tool or step running it", () => {
+  const MASTRA_SPAN_ID = 'a1b2c3d4e5f60718';
+
+  /**
+   * Stands in for the span Mastra hands a tool or step. With a bridge, Mastra takes its ids from the
+   * span the bridge opened in the bridge's own tracing system.
+   */
+  const mastraSpan = (options: { readonly traceId: string; readonly bridge?: string; readonly exportedSpanId?: string | null }) =>
+    ({
+      id: MASTRA_SPAN_ID,
+      traceId: options.traceId,
+      isValid: true,
+      isInternal: false,
+      getExportedSpanId: () => (options.exportedSpanId === undefined ? MASTRA_SPAN_ID : (options.exportedSpanId ?? undefined)),
+      observabilityInstance: { getBridge: () => (options.bridge ? { name: options.bridge } : undefined) },
+    }) as unknown as AnySpan;
+
+  type Parent = { spanId: string; traceId: string; sampled: boolean } | null;
+
+  /** A router whose step hands runInRequest the given Mastra span, built from the request's trace id. */
+  const routerWithMastraSpan = async (span: (requestTraceId: string) => AnySpan) => {
+    const runtime = ManagedRuntime.make(GreeterLive);
+    const step = createStep({
+      id: 'greet',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ parent: z.object({ spanId: z.string(), traceId: z.string(), sampled: z.boolean() }).nullable() }),
+      execute: context =>
+        runInRequest(
+          runtime,
+          Effect.map(Effect.option(Effect.currentParentSpan), parent => ({
+            parent: Option.isSome(parent)
+              ? { spanId: parent.value.spanId, traceId: parent.value.traceId, sampled: parent.value.sampled }
+              : null,
+          })),
+          { ...context, tracingContext: { currentSpan: span(requestSpan(context.requestContext)?.traceId ?? '') } },
+        ),
+    });
+    const workflow = createWorkflow({
+      id: 'greet',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ parent: z.object({ spanId: z.string(), traceId: z.string(), sampled: z.boolean() }).nullable() }),
+    })
+      .then(step)
+      .commit();
+    const router = createRouter();
+    await new MastraServer({ app: router, mastra: new Mastra({ storage: new InMemoryStore(), workflows: { greet: workflow } }) }).init();
+    return router;
+  };
+
+  /** Starts the workflow with a tracer, returning the parent the step's Effect ran under and the request's span. */
+  const run = async (router: EffectRouter, headers: Record<string, string> = {}) => {
+    const tracer = recordingTracer();
+    const response = await viaFetchHandlerWith(router, tracer.layer, startGreeting(headers));
+    const body = (await response.json()) as { result?: { parent: Parent } };
+    return { parent: body.result?.parent, request: tracer.spans.find(span => span.kind === 'server') };
+  };
+
+  it("should run under the tool's or step's span when OpenTelemetry's bridge opened it in the request's trace", async () => {
+    // GIVEN a step whose Mastra span came from OpenTelemetry's bridge, in the request's trace
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId, bridge: 'otel' }));
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step's Effect should run under Mastra's span, in the same trace
+    expect(parent).toEqual({ spanId: MASTRA_SPAN_ID, traceId: request?.traceId, sampled: true });
+  });
+
+  it("should keep the request's decision to drop the trace", async () => {
+    // GIVEN the same step, and a caller whose trace was sampled out upstream (W3C trace flags 00)
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId, bridge: 'otel' }));
+
+    // WHEN the workflow is started inside that trace
+    const { parent } = await run(router, { traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00' });
+
+    // THEN the step's Effect should run under Mastra's span, and be dropped with the rest of the trace
+    expect(parent).toEqual({ spanId: MASTRA_SPAN_ID, traceId: '0af7651916cd43dd8448eb211c80319c', sampled: false });
+  });
+
+  it("should stay under the request's span when Mastra's span is in another trace", async () => {
+    // GIVEN a Mastra span that the bridge started in a trace of its own, as with no context manager
+    const router = await routerWithMastraSpan(() => mastraSpan({ traceId: 'ffffffffffffffffffffffffffffffff', bridge: 'otel' }));
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step's Effect should stay under the request's span, so it stays in the request's trace
+    expect(parent).toEqual({ spanId: request?.spanId, traceId: request?.traceId, sampled: true });
+  });
+
+  it("should stay under the request's span when the bridge is not OpenTelemetry's", async () => {
+    // GIVEN a Mastra span from another tracing system's bridge, whose ids mean nothing to OpenTelemetry
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId, bridge: 'datadog' }));
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step's Effect should stay under the request's span
+    expect(parent?.spanId).toBe(request?.spanId);
+  });
+
+  it("should stay under the request's span when Mastra has no bridge", async () => {
+    // GIVEN a Mastra span with ids of Mastra's own making, exported through Mastra's own exporters
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId }));
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step's Effect should stay under the request's span
+    expect(parent?.spanId).toBe(request?.spanId);
+  });
+
+  it("should run under the nearest exported span when Mastra's own span is left out of export", async () => {
+    // GIVEN a Mastra span excluded from export, as internal spans are, whose parent is exported
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId, bridge: 'otel', exportedSpanId: '0f1e2d3c4b5a6978' }));
+
+    // WHEN the workflow is started
+    const { parent } = await run(router);
+
+    // THEN the step's Effect should run under that exported ancestor, which the trace will contain
+    expect(parent?.spanId).toBe('0f1e2d3c4b5a6978');
+  });
+
+  it("should stay under the request's span when nothing of Mastra's reaches export", async () => {
+    // GIVEN a Mastra span excluded from export with no exported ancestor
+    const router = await routerWithMastraSpan(traceId => mastraSpan({ traceId, bridge: 'otel', exportedSpanId: null }));
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step's Effect should stay under the request's span rather than under a span the trace lacks
+    expect(parent?.spanId).toBe(request?.spanId);
+  });
+
+  it("should stay under the request's span, without failing, when the span came with nothing else", async () => {
+    // GIVEN a context built by hand, as a test calling a step directly might, carrying a bare span
+    const router = await routerWithMastraSpan(traceId => ({ id: MASTRA_SPAN_ID, traceId, isValid: true }) as unknown as AnySpan);
+
+    // WHEN the workflow is started
+    const { parent, request } = await run(router);
+
+    // THEN the step should still run, under the request's span
+    expect(parent?.spanId).toBe(request?.spanId);
   });
 });

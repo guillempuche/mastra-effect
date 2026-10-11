@@ -92,7 +92,7 @@ Two things make it work, and both are easy to miss:
   holes where its agent spans should be. Per-chunk spans of streamed answers are left out.
 
 Your own Effect code inside a tool or workflow step, run with `runInRequest`, joins the same trace
-when its runtime has `runtimeTracing`:
+when its runtime has `runtimeTracing`, inside the span of the tool call or step that ran it:
 
 ```ts
 const runtime = ManagedRuntime.make(Layer.mergeAll(AppServicesLive, runtimeTracing('my-app')));
