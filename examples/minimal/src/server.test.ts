@@ -1,7 +1,6 @@
-import { createServer as createNetServer } from 'node:net';
-
 import { toWebHandler, type EffectRouter } from '@guillem_puche/mastra-effect';
 import { Effect, ManagedRuntime } from 'effect';
+import { HttpServer } from 'effect/http';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { buildServer, serve } from './server.ts';
@@ -22,17 +21,6 @@ const startWorkflow = (body: string) =>
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body,
-  });
-
-/** Asks the OS for a port nobody is using, then gives it back so the server can take it. */
-const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const probe = createNetServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => (typeof address === 'object' && address ? resolve(address.port) : reject(new Error('no port'))));
-    });
   });
 
 beforeAll(async () => {
@@ -110,10 +98,13 @@ describe('the minimal server', () => {
 
   describe('when served on a real Node port', () => {
     it('should answer over HTTP, and stop answering once shut down', async () => {
-      // GIVEN the server started on a free port, exactly as `pnpm dev` starts it
-      const port = await freePort();
-      const runtime = ManagedRuntime.make(serve(router, port));
-      await runtime.runPromise(Effect.void);
+      // GIVEN the server started exactly as `pnpm dev` starts it, on a port the OS picks as it binds
+      const runtime = ManagedRuntime.make(serve(router, 0));
+      const port = await runtime.runPromise(
+        Effect.flatMap(Effect.service(HttpServer.HttpServer), ({ address }) =>
+          'port' in address ? Effect.succeed(address.port) : Effect.die(new Error('not listening on a TCP port')),
+        ),
+      );
 
       try {
         // WHEN a real HTTP request reaches it
