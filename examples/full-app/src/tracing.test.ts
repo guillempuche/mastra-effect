@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { NodeHttpServer } from '@effect/platform-node';
 import { MastraServer, createRouter, runInRequest } from '@guillem_puche/mastra-effect';
 import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
@@ -11,7 +12,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { SpanKind, trace } from '@opentelemetry/api';
 import { InMemoryLogRecordExporter } from '@opentelemetry/sdk-logs';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { type Duration, Effect, Exit, Layer, ManagedRuntime } from 'effect';
 import { HttpServer } from 'effect/http';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -35,8 +36,11 @@ const recordingExporter = () => {
   return { finished, exporter };
 };
 
-/** Serves Mastra on a real Node server with the app's telemetry layer, exporting spans to memory. */
-const serveTraced = async (mastra: Mastra) => {
+/**
+ * Serves Mastra on a real Node server with the app's telemetry layer, exporting spans to memory.
+ * `shutdownTimeout` bounds how long stopping waits for requests still running before cancelling them.
+ */
+const serveTraced = async (mastra: Mastra, options: { readonly shutdownTimeout?: Duration.Input } = {}) => {
   const spans = recordingExporter();
   const router = createRouter();
   await new MastraServer({ app: router, mastra }).init();
@@ -44,7 +48,7 @@ const serveTraced = async (mastra: Mastra) => {
   // Port 0 lets the OS pick a free port as the server binds it, with no gap for another test to take it.
   const server = ManagedRuntime.make(
     HttpServer.serve()(router.asHttpEffect()).pipe(
-      Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port: 0 })),
+      Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port: 0, gracefulShutdownTimeout: options.shutdownTimeout })),
       Layer.provide(telemetryLayer({ serviceName: 'tracing-test', exporters: { spans: spans.exporter, logs: new InMemoryLogRecordExporter() } })),
     ),
   );
@@ -246,6 +250,82 @@ describe("tracing Effect code a tool or step runs, with Mastra's spans bridged",
     expect(response.status).toBe(200);
     expect(finished.filter(span => span.spanContext().traceId === '0af7651916cd43dd8448eb211c80319c')).toEqual([]);
     expect(finished.map(span => span.name)).not.toContain('lookup.effect');
+  });
+});
+
+describe('stopping the server', () => {
+  it('should export a span whose end was still scheduled when telemetry shut down', async () => {
+    // GIVEN the app's telemetry layer, exporting to memory
+    const spans = recordingExporter();
+    const telemetry = ManagedRuntime.make(
+      telemetryLayer({ serviceName: 'tracing-test', exporters: { spans: spans.exporter, logs: new InMemoryLogRecordExporter() } }),
+    );
+
+    // WHEN a span is ended from a task on Effect's scheduler, the way Effect's HTTP tracer ends a
+    // request's span, and telemetry shuts down before that task has run
+    await telemetry.runPromise(
+      Effect.flatMap(Effect.makeSpan('scheduled.end'), span =>
+        Effect.withFiber(fiber =>
+          Effect.sync(() => fiber.currentDispatcher.scheduleTask(() => span.end(BigInt(Date.now()) * 1_000_000n, Exit.void), 0)),
+        ),
+      ),
+    );
+    await telemetry.dispose();
+
+    // THEN the span should still be exported: shutdown lets scheduled span ends run first
+    expect(spans.finished.map(span => span.name)).toContain('scheduled.end');
+  });
+
+  it('should still export the span of a request that finished just before', async () => {
+    // GIVEN an agent whose model calls a tool, traced through the app's telemetry layer
+    const lookup = createTool({ id: 'lookup', description: 'Looks something up', inputSchema: z.object({}), execute: async () => ({ found: true }) });
+    const agent = new Agent({ id: 'assistant', name: 'assistant', instructions: 'x', model: toolCallingModel(), tools: { lookup } });
+    const server = await serveTraced(new Mastra({ agents: { assistant: agent }, observability: mastraObservability('tracing-test') }));
+
+    // WHEN the server stops as soon as the client has the whole answer
+    let status: number | undefined;
+    let finished: ReadableSpan[];
+    try {
+      const response = await server.post('/api/agents/assistant/generate', { messages: 'find it' });
+      await response.text();
+      status = response.status;
+    } finally {
+      finished = await server.close();
+    }
+
+    // THEN the request's own span should be exported, as the parent of the agent's
+    const request = finished.find(span => span.kind === SpanKind.SERVER);
+    const agentRun = finished.find(span => span.name.startsWith('invoke_agent'));
+    expect(status).toBe(200);
+    expect(request).toBeDefined();
+    expect(agentRun?.parentSpanContext?.spanId).toBe(request?.spanContext().spanId);
+  });
+
+  it('should export the span of a request still running when the server stops', async () => {
+    // GIVEN a route that never answers, and a way to know it has started
+    let started!: () => void;
+    const running = new Promise<void>(resolve => (started = resolve));
+    const hang = registerApiRoute('/hang', {
+      method: 'POST',
+      handler: async () => {
+        started();
+        return new Promise<Response>(() => {});
+      },
+    });
+    const server = await serveTraced(new Mastra({ server: { apiRoutes: [hang] } }), { shutdownTimeout: '50 millis' });
+
+    // WHEN the server stops while that request is still running
+    const pending = server.post('/hang', {}).catch(() => undefined);
+    let finished: ReadableSpan[];
+    try {
+      await running;
+    } finally {
+      finished = await server.close();
+    }
+    await pending;
+
+    // THEN the interrupted request should still leave its span
+    expect(finished.filter(span => span.kind === SpanKind.SERVER)).toHaveLength(1);
   });
 });
 

@@ -198,7 +198,8 @@ export const telemetryEnabled = (): boolean => Boolean(process.env.OTEL_EXPORTER
  * The registration is undone when the layer is released. Otherwise the process keeps the shut-down
  * provider as its global one, and OpenTelemetry refuses a second registration, so a server started
  * again in the same process — a restart in development, a second test — would export none of
- * Mastra's spans, with nothing to say so.
+ * Mastra's spans, with nothing to say so. Releasing it also lets the spans of requests that finished
+ * just before shutdown end first, so the last requests a server answered keep their records.
  */
 export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
   if (!options.exporters && !telemetryEnabled()) return Layer.empty;
@@ -217,7 +218,14 @@ export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
     ),
   );
 
-  const tracing = Layer.mergeAll(OtelTracer.layer, registerGlobally).pipe(
+  // Effect ends a request's span in a task it schedules once the request is over, so a request that
+  // finished just before shutdown still has its span waiting there. Released before the provider
+  // below, this yields once so that task runs first: Effect's scheduler runs tasks of the same
+  // priority in order, which `src/tracing.test.ts` pins. Without it the provider flushes and shuts
+  // down before the span ends, and the span is lost.
+  const endScheduledSpans = Layer.effectDiscard(Effect.addFinalizer(() => Effect.yieldNow));
+
+  const tracing = Layer.mergeAll(OtelTracer.layer, registerGlobally, endScheduledSpans).pipe(
     Layer.provide(NodeSdk.layerTracerProvider(new BatchSpanProcessor(options.exporters?.spans ?? new OTLPTraceExporter()))),
   );
 

@@ -87,7 +87,9 @@ Two things make it work, and both are easy to miss:
   ([mastra-ai/mastra#24950](https://github.com/mastra-ai/mastra/issues/24950)). Registering also
   installs the context manager that lets Mastra's spans nest under the request. The registration is
   undone when the server stops. OpenTelemetry refuses to register twice, so without that, a server
-  started again in the same process would export none of Mastra's spans.
+  started again in the same process would export none of Mastra's spans. Shutdown first lets the
+  spans of requests that just finished end. Effect ends a request's span in a task it schedules,
+  and the provider would otherwise flush before that task ran, losing those requests' spans.
 - **Mastra samples everything** and leaves sampling to OpenTelemetry, so a sampled request never has
   holes where its agent spans should be. Per-chunk spans of streamed answers are left out.
 
