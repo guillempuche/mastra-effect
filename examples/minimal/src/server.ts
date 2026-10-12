@@ -21,10 +21,13 @@ export async function buildServer(): Promise<EffectRouter> {
   return router;
 }
 
-/** Serves the router on Node. `Layer.launch` keeps it running until the process is stopped. */
+/**
+ * Serves the router on Node. `Layer.launch` keeps it running until the process is stopped. The
+ * server it provides carries the address it bound, so port 0 can leave the choice to the OS.
+ */
 export const serve = (router: EffectRouter, port: number) =>
   HttpServer.serve()(router.asHttpEffect()).pipe(
-    Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
+    Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port })),
   );
 
 // Only when run directly (`pnpm dev`), so importing this file in a test never opens a port.

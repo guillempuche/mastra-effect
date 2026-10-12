@@ -3,7 +3,6 @@
  * published entry.
  */
 import { createServer } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
 
 import { NodeHttpServer } from '@effect/platform-node';
 import { Effect, Layer, ManagedRuntime } from 'effect';
@@ -21,30 +20,20 @@ export const viaFetchHandler = async (router: EffectRouter, request: Request): P
   }
 };
 
-/** Asks the OS for a port nobody is using, then gives it back so the server can take it. */
-export const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const probe = createNetServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => (typeof address === 'object' && address ? resolve(address.port) : reject(new Error('no port'))));
-    });
-  });
-
 /**
  * Serves the router on a real Node HTTP server, the way an Effect app normally runs. `services` is
  * provided to the server, for a test that needs a tracer or other services in place.
  */
 export const onNodeServer = async (router: EffectRouter, services: Layer.Layer<never> = Layer.empty) => {
-  const port = await freePort();
+  // Port 0 lets the OS pick a free port as the server binds it. Picking one first and binding it
+  // after leaves a gap in which a test file running in parallel can take the same port.
   const runtime = ManagedRuntime.make(
     HttpServer.serve()(router.asHttpEffect()).pipe(
-      Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
+      Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port: 0 })),
       Layer.provide(services),
     ),
   );
-  await runtime.runPromise(Effect.void);
+  const port = await runtime.runPromise(boundPort);
   const origin = `http://127.0.0.1:${port}`;
   return {
     port,
@@ -57,3 +46,8 @@ export const onNodeServer = async (router: EffectRouter, services: Layer.Layer<n
 };
 
 export type NodeServer = Awaited<ReturnType<typeof onNodeServer>>;
+
+/** The port the running server bound. */
+const boundPort = Effect.flatMap(Effect.service(HttpServer.HttpServer), server =>
+  'port' in server.address ? Effect.succeed(server.address.port) : Effect.die(new Error('not listening on a TCP port')),
+);

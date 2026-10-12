@@ -1,5 +1,4 @@
 import { createServer } from 'node:http';
-import { createServer as createNetServer } from 'node:net';
 
 import { NodeHttpServer } from '@effect/platform-node';
 import { MastraServer, createRouter, runInRequest } from '@guillem_puche/mastra-effect';
@@ -36,29 +35,24 @@ const recordingExporter = () => {
   return { finished, exporter };
 };
 
-const freePort = () =>
-  new Promise<number>(resolve => {
-    const probe = createNetServer();
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-
 /** Serves Mastra on a real Node server with the app's telemetry layer, exporting spans to memory. */
 const serveTraced = async (mastra: Mastra) => {
   const spans = recordingExporter();
   const router = createRouter();
   await new MastraServer({ app: router, mastra }).init();
 
-  const port = await freePort();
+  // Port 0 lets the OS pick a free port as the server binds it, with no gap for another test to take it.
   const server = ManagedRuntime.make(
     HttpServer.serve()(router.asHttpEffect()).pipe(
-      Layer.provide(NodeHttpServer.layer(() => createServer(), { port })),
+      Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port: 0 })),
       Layer.provide(telemetryLayer({ serviceName: 'tracing-test', exporters: { spans: spans.exporter, logs: new InMemoryLogRecordExporter() } })),
     ),
   );
-  await server.runPromise(Effect.void);
+  const port = await server.runPromise(
+    Effect.flatMap(Effect.service(HttpServer.HttpServer), ({ address }) =>
+      'port' in address ? Effect.succeed(address.port) : Effect.die(new Error('not listening on a TCP port')),
+    ),
+  );
 
   return {
     post: (path: string, body: unknown, headers: Record<string, string> = {}) =>
