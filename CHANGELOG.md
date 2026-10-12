@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 
+## [0.2.1](https://github.com/guillempuche/mastra-effect/compare/v0.2.0...v0.2.1) (2026-10-12)
+
+### Bug Fixes
+
+* **full-app:** keep the spans of requests that end as the server stops ([6021eb1](https://github.com/guillempuche/mastra-effect/commit/6021eb12cf18c1fa5e9ad85af6a8e79ab0b38d78))
+* trace Effect code under the tool or step that runs it ([ad67093](https://github.com/guillempuche/mastra-effect/commit/ad670931f9ed045621fc6e702d9265b66f409603))
+
+### Tests
+
+* let test servers take a free port as they bind it ([e8ba8ec](https://github.com/guillempuche/mastra-effect/commit/e8ba8ec16e3800f1949e459bbe90a34e7e550422))
+
 ## [0.2.0](https://github.com/guillempuche/mastra-effect/compare/v0.1.0...v0.2.0) (2026-10-02)
 
 ### ⚠ BREAKING CHANGES
