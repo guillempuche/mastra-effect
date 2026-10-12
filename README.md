@@ -57,6 +57,9 @@ fiber. Three things cross back into Effect:
   [`examples/full-app`](examples/full-app) sets this up. It needs the tracer provider registered
   globally, which Effect's `NodeSdk.layer` does not do by itself
   ([mastra-ai/mastra#24950](https://github.com/mastra-ai/mastra/issues/24950)).
+  Stopping the server can also lose the spans of the requests it answered last: Effect ends a
+  request's span in a task it schedules, and the tracer provider can shut down before that task
+  runs. `telemetryLayer` there yields once before the provider shuts down, so those spans end first.
 
 ## Install
 
