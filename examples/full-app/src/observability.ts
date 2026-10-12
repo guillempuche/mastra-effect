@@ -218,11 +218,12 @@ export function telemetryLayer(options: TelemetryOptions): Layer.Layer<never> {
     ),
   );
 
-  // Effect ends a request's span in a task it schedules once the request is over, so a request that
-  // finished just before shutdown still has its span waiting there. Released before the provider
-  // below, this yields once so that task runs first: Effect's scheduler runs tasks of the same
-  // priority in order, which `src/tracing.test.ts` pins. Without it the provider flushes and shuts
-  // down before the span ends, and the span is lost.
+  // Effect ends a request's span once its response is written, in a task queued with setImmediate.
+  // A large or streamed response can finish writing while the server stops, after it was sent, so
+  // that task is still waiting when the provider below shuts down, and the span is lost. Released
+  // after the server, which waits for open responses, and before the provider, this yields once:
+  // its own setImmediate runs after the span's, since Node runs them in the order they were queued.
+  // `src/tracing.test.ts` pins that order.
   const endScheduledSpans = Layer.effectDiscard(Effect.addFinalizer(() => Effect.yieldNow));
 
   const tracing = Layer.mergeAll(OtelTracer.layer, registerGlobally, endScheduledSpans).pipe(
